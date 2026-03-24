@@ -1,0 +1,45 @@
+name: Bump Skill Versions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client-auditor/**'
+      - 'contract-auditor/**'
+      - 'exploit-investigator/**'
+
+jobs:
+  bump-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Bump versions for changed skills
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          bumped=false
+          for skill in client-auditor contract-auditor exploit-investigator; do
+            # Detect content changes, ignoring VERSION file itself
+            if git diff --name-only HEAD~1 HEAD \
+                | grep "^${skill}/" \
+                | grep -qv "^${skill}/VERSION$"; then
+              current=$(cat "${skill}/VERSION" | tr -d '[:space:]')
+              next=$((current + 1))
+              echo "$next" > "${skill}/VERSION"
+              git add "${skill}/VERSION"
+              echo "Bumped ${skill}: ${current} → ${next}"
+              bumped=true
+            fi
+          done
+
+          if [ "$bumped" = "true" ]; then
+            git commit -m "chore: bump skill versions [skip ci]"
+            git push origin main
+          fi

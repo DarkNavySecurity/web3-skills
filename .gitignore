@@ -1,0 +1,24 @@
+*.DS_Store
+.claude/
+
+# Analysis output directories
+exploit-investigator/reports
+
+# Foundry dependencies
+exploit-investigator/foundry_template/lib/
+exploit-investigator/foundry_template/out/
+exploit-investigator/foundry_template/cache/
+
+# Python cache
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+.idea/
