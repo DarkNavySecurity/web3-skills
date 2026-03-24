@@ -33,6 +33,19 @@ bash web3-skills/install.sh
 Update skill https://github.com/DarkNavySecurity/web3-skills/
 ```
 
+## Track Record
+
+**Smart Contract Auditing** — $21K earned on [Immunefi](https://immunefi.com/)
+
+<img src="./images/immunefi.png" width="420" />
+
+**Blockchain Client Auditing** — Independently discovered a vulnerability in [rippled](https://github.com/XRPLF/rippled) (XRP Ledger), officially acknowledged and patched
+
+<img src="./images/rippled_bug.png" width="420" />
+
+**Onchain Exploit Analysis** — Artifacts in [web3-exploit-analysis](https://github.com/DarkNavySecurity/web3-exploit-analysis), also posted on [![X](https://img.shields.io/badge/Defi_Nerd-000000?logo=x&logoColor=white)](https://x.com/Defi_Nerd_sec)
+
+
 ## License
 
 [MIT](./LICENSE)
