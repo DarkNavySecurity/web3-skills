@@ -1,0 +1,76 @@
+name: Bug Report
+description: Report inaccurate output or unexpected behavior from a skill
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Skill
+      description: Which skill is affected?
+      options:
+        - client-auditor
+        - contract-auditor
+        - exploit-investigator
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Skill VERSION
+      description: Check the VERSION file in the skill directory.
+      placeholder: "e.g., 3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: invocation
+    attributes:
+      label: Invocation method
+      options:
+        - Claude Code CLI
+        - VS Code (Claude extension)
+        - Cursor
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Claude model
+      placeholder: "e.g., claude-sonnet-4-20250514"
+    validations:
+      required: true
+
+  - type: textarea
+    id: input
+    attributes:
+      label: Input
+      description: How did you invoke the skill? Include arguments and target description.
+      placeholder: "/client-auditor . deep"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output
+      description: What did the skill produce? Paste the relevant portion.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected output
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help — target codebase, logs, screenshots.
