@@ -1,5 +1,7 @@
 # Blockchain Client Auditor
 
+![client-auditor overview](../images/client-auditor.jpg)
+
 A Claude Code skill for security auditing of blockchain node implementations. Covers execution clients, consensus clients, app-chain SDKs, bridges, and any codebase with P2P networking or consensus logic — written in Go, Rust, C/C++, etc.
 
 ---

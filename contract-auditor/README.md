@@ -1,5 +1,7 @@
 # contract-auditor
 
+![contract-auditor overview](../images/contract-auditor.jpg)
+
 A methodology-driven AI security auditor (for Solidity currently, pending for Move, Rust, etc.). Four specialized agents hunt in parallel — each with a different analysis dimension and heuristics — then findings are merged, deduplicated, and validated.
 
 Built for:

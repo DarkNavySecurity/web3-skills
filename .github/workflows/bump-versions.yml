@@ -5,8 +5,11 @@ on:
     branches: [main]
     paths:
       - 'client-auditor/**'
+      - '!client-auditor/README.md'
       - 'contract-auditor/**'
+      - '!contract-auditor/README.md'
       - 'exploit-investigator/**'
+      - '!exploit-investigator/README.md'
 
 jobs:
   bump-versions:
@@ -21,15 +24,16 @@ jobs:
 
       - name: Bump versions for changed skills
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           bumped=false
           for skill in client-auditor contract-auditor exploit-investigator; do
-            # Detect content changes, ignoring VERSION file itself
+            # Detect content changes, ignoring VERSION and README.md
             if git diff --name-only HEAD~1 HEAD \
-                | grep "^${skill}/" \
-                | grep -qv "^${skill}/VERSION$"; then
+              | grep "^${skill}/" \
+              | grep -qvE "^${skill}/(VERSION|README\.md)$"; then
+
               current=$(cat "${skill}/VERSION" | tr -d '[:space:]')
               next=$((current + 1))
               echo "$next" > "${skill}/VERSION"
