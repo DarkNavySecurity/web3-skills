@@ -15,6 +15,21 @@ Validation rigor scales with severity. High/Critical findings that claim real da
 
 ---
 
+## Filter 0 — Design Intent Gate
+
+Before applying any other validation, determine whether the behavior you identified is intentional.
+
+1. **Read design signals**: Examine the function's NatSpec, inline comments, naming conventions, parameter names, and broader protocol architecture. Look for documentation that explicitly describes the behavior as a feature.
+
+2. **Assess intent**:
+   - **Clearly intentional** — NatSpec describes this behavior, naming confirms it, or the pattern is a standard design choice (e.g., admin-controlled parameters, documented fee mechanisms, acknowledged centralization). → **DROP** with evidence citation: quote the specific NatSpec, comment, or naming convention that confirms intent.
+   - **Ambiguous** — No clear documentation either way, or comments are stale/contradictory. → **Proceed** to Filter 1, but flag the ambiguity for adversarial review. Note what evidence you looked for and didn't find.
+   - **Clearly unintentional** — Behavior contradicts NatSpec, violates naming conventions, or diverges from documented invariants. → **Proceed** to Filter 1.
+
+3. **Scope**: This gate applies at ALL severity levels, including Low and Informational. A code pattern that is clearly by-design is not a finding at any severity — it is a design choice. However, design choices with non-obvious consequences for users/deployers may still be reported as Informational if the consequence is genuinely surprising.
+
+---
+
 ## Filter 1 — Three Hard Gates (Critical / High only)
 
 **For Critical/High findings: fail ANY gate = discard.** For Medium: all three required but with relaxed profit expectations. For Low/Info: see tier table above.
@@ -154,7 +169,10 @@ Before writing any Critical/High/Medium finding, answer:
 - How often:      [once / per transaction / unbounded repeat]
 - Attacker cost:   [gas only / N ETH flash loan / governance role required]
 - Attacker profit: [$ value or ratio — for griefing/DoS, state "none, griefing only"]
+- Assumptions:    [conditions assumed but not verified; what validation would confirm or disprove]
 ```
+
+Uncertainty is itself information — it tells the reader who should intervene next and what validation is worth running. Always state what you assumed and what you could not verify.
 
 For Critical/High: attacker profit must be positive. For Medium: profit can be "none" if impact is griefing, DoS, or state corruption. Not required for Low/Informational.
 

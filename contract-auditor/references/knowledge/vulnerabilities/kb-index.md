@@ -2,7 +2,7 @@
 
 Reference files for deep-dive detection heuristics. Each file contains: Preconditions, Vulnerable Pattern, Detection Heuristics, False Positives, and Remediation.
 
-**Usage**: Agents receive this index in their bundle. When a pass identifies a potential vulnerability matching one of these categories, Read the specific file for detailed detection guidance.
+**Usage**: When a pass identifies a potential vulnerability matching one of these categories, Read the specific file for detailed detection guidance.
 
 ---
 

@@ -56,6 +56,26 @@ Rules:
 - Scores in brackets: `[100]`, `[85]`, `[75]`.
 - Titles must match the `##` heading titles exactly.
 
+Then `---` before the coverage summary.
+
+---
+
+## Section 2.5 — Coverage Summary
+
+After the findings summary table and before the findings section, include:
+
+### Coverage
+
+| Contract | Functions Analyzed | Methodology Dimensions |
+|----------|-------------------|----------------------|
+| <Contract.sol> | N / M | composability, state-invariants |
+| <Contract.sol> | N / M | vulnerability-patterns, boundaries |
+
+- M = total entry points from the context map (shared ground truth across all agents)
+- N = entry points with at least one analysis pass (from agent coverage logs)
+- If any contract has coverage < 80%, flag it as a gap
+- If follow-up analysis was spawned for gaps, note what it targeted
+
 Then `---` before the findings section.
 
 ---
@@ -76,6 +96,8 @@ Each finding follows this exact structure, separated by `---`:
 **Impact** — <what is lost or broken if exploited>
 
 **Description** — <one sentence: what the code does wrong and how it is exploited>
+
+**Assumptions** — <conditions assumed but not verified; what validation would confirm or disprove>
 
 ```diff
 - the vulnerable line or lines
@@ -154,6 +176,18 @@ Structure: what the code does wrong → how the attacker exploits it → what th
 Good: `` **Description** — `withdraw` uses `balanceOf(address(this))` instead of internal accounting; a flash-loan deposit inflates the balance, allowing the caller to extract more than their share. ``
 Bad:  `**Description** — The withdraw function has a vulnerability that allows attackers to steal funds.`
 
+### 3f+ — Assumptions (above-threshold findings only)
+
+Format: `**Assumptions** — <text>`
+
+State what conditions this finding depends on that were not fully verified, and what additional validation would confirm or disprove it. Uncertainty is actionable information — it tells the reviewer where to focus.
+
+- Good: `assumes token whitelist includes fee-on-transfer tokens; not verified whether admin restricts token list. Manual review of deployment config would confirm.`
+- Good: `requires oracle staleness > 1 hour; Chainlink heartbeat for this pair not checked. Verify heartbeat interval for the specific price feed.`
+- Bad: `some assumptions exist`
+
+**Omit for below-threshold findings** — their lower confidence is already implicit in the score.
+
 ### 3g — The diff block (above-threshold findings only)
 
 Rules:
@@ -181,6 +215,12 @@ Rules:
 |   |  ·      |                 |
 | 3 | [score] | <below-threshold finding title> |
 
+### Coverage
+
+| Contract | Functions Analyzed | Methodology Dimensions |
+|----------|-------------------|----------------------|
+| <Contract.sol> | N / M | <dimensions applied> |
+
 ---
 
 ## [score] 1. <Finding Title>
@@ -194,6 +234,8 @@ Rules:
 **Impact** — <concrete loss or breakage, quantified where possible>
 
 **Description** — <one sentence: what the code does wrong, how it is exploited, what is gained>
+
+**Assumptions** — <conditions assumed but not verified; what validation would confirm>
 
 ```diff
 - <vulnerable line from actual source>
