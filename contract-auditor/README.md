@@ -1,8 +1,6 @@
 # contract-auditor
 
-![contract-auditor overview](../images/contract-auditor.jpg)
-
-A methodology-driven AI security auditor for Solidity. The lead auditor reads code, builds a structured context map, then delegates focused analysis to hunt agents — each with a different analytical dimension. Findings are merged, deduplicated, and validated.
+A DFS-based AI security auditor for Solidity. The lead auditor reads code, builds a structured context map, extracts value-flow call paths, then delegates each path to a hunt agent for line-by-line depth-first analysis. Findings are merged, deduplicated, and validated.
 
 Built for:
 
@@ -14,22 +12,13 @@ Not a substitute for a formal audit — but the check you should never skip.
 
 ## Design philosophy
 
-The lead auditor reads every line of code first. No agent hunts blind.
+The model is already a strong reasoner. The skill doesn't try to think for it — it ensures the model **sees everything** and **knows the domain patterns**, then gets out of the way.
 
-**Context map** — Before any hunting begins, the orchestrator reads all source files and builds a structured context map: entry points with file:line pointers, state architecture (who writes / who reads), value flows, cross-contract dependencies, and observations. This becomes the shared substrate for the entire audit — agents navigate from it, coverage tracks against it.
+**Coverage, not constraint** — The biggest failure mode of AI auditing isn't wrong reasoning — it's missing code. An agent that never reads a function can't find a bug in it. The skill's primary job is structural: build a context map of every entry point, every state variable, every value flow, every cross-contract call. Group paths by state coupling so no shared mutable variable falls between agent boundaries. Track coverage against a ground-truth census so gaps are caught, not assumed away. The reasoning within each path is the model's to do freely.
 
-**Dynamic agent strategy** — Hunt agents scale to observed complexity. Each gets a distinct analytical dimension as a lens, not a boundary:
+**Domain knowledge as a reference, not a script** — The checklist is a curated set of Solidity vulnerability patterns (reentrancy, precision loss, access control gaps, oracle manipulation, etc.) that agents read from disk and consult when they encounter a matching code pattern. It tells the agent *what to check for* when it sees a division or an external call — it doesn't tell it *what to conclude*. The agent's own judgment drives whether something is a finding, a design choice, or a false alarm.
 
-| Dimension | Focus |
-|-----------|-------|
-| Discovery & Composability | External interactions, anomaly detection, economic game theory |
-| State Integrity & Value Flow | Invariant breaking, state propagation, value flow tracing |
-| Vulnerability Pattern Matching | Standard vulnerability classes, token behavior, zero/sentinel analysis |
-| Boundaries & Cross-Contract | Delegation boundaries, cross-contract interactions, mechanism matrices |
-
-Agents explore freely — the context map orients them, references load on-demand when needed.
-
-**Validation discipline** — Every finding passes through a structured protocol (3-gate + 6D adversarial scoring). DEEP mode adds an adversarial agent that challenges every finding with a 6-check falsification protocol and hunts independently for what the other agents missed.
+**Validation as discipline, not gatekeeping** — Every finding passes through a structured protocol (3-gate + 6D adversarial scoring) to prevent hallucinated vulnerabilities. DEEP mode adds a falsifier agent that challenges every finding with source-level verification. The goal is precision — not suppressing the model's instincts, but requiring it to show its work.
 
 ## Usage
 
@@ -37,7 +26,7 @@ Agents explore freely — the context map orients them, references load on-deman
 # Scan the full repo
 /contract-auditor
 
-# Deep: context building + adversarial challenge
+# Deep: adds adversarial falsifier after merge
 /contract-auditor deep
 
 # Review specific file(s)

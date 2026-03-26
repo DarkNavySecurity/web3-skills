@@ -1,6 +1,6 @@
 # Finding Validation Protocol
 
-Validation rigor scales with severity. High/Critical findings that claim real damage to users or the system must survive the full gauntlet. Low/Informational findings that flag genuine code issues are valid with lighter evidence — but they must still be **true valid findings**, not noise.
+Validation rigor scales with severity.
 
 ---
 
@@ -11,6 +11,7 @@ Validation rigor scales with severity. High/Critical findings that claim real da
 | Critical / High | Direct fund loss, permanent DoS, or privilege escalation affecting users | Full protocol: 3 Hard Gates + 6D Scoring + PoC Quantification |
 | Medium | Conditional fund risk, griefing, state corruption with workaround, or DoS with recovery path | Gates 1-3 required, but profit can be indirect (blocked withdrawals, governance disruption, degraded functionality). 6D Scoring recommended but not mandatory. |
 | Low | Valid code issue with potential future risk, edge-case misbehavior, or dependency on unlikely-but-possible preconditions | Gate 1 (concrete path) required — must identify the specific code and behavior. Gates 2-3 relaxed: the path may require unlikely preconditions (non-standard tokens, specific parameter configs, role actions). No profit requirement. |
+| Design Advisory | Documented design decision with non-obvious consequences for users, integrators, or composability | Specific code location + documented design intent (NatSpec, comments, or naming) + non-obvious consequence. Does NOT pass through Three Hard Gates — this is not a bug. Must cite the design intent and explain the consequence. |
 | Informational | Code smell, deviation from best practice, design concern, or consequence of using a mechanism as designed | Must identify specific code location and explain what is wrong or surprising. No attack path required. Must be a **true valid observation** — not a linter warning, not a style preference, not a documentation nit. |
 
 ---
@@ -22,11 +23,11 @@ Before applying any other validation, determine whether the behavior you identif
 1. **Read design signals**: Examine the function's NatSpec, inline comments, naming conventions, parameter names, and broader protocol architecture. Look for documentation that explicitly describes the behavior as a feature.
 
 2. **Assess intent**:
-   - **Clearly intentional** — NatSpec describes this behavior, naming confirms it, or the pattern is a standard design choice (e.g., admin-controlled parameters, documented fee mechanisms, acknowledged centralization). → **DROP** with evidence citation: quote the specific NatSpec, comment, or naming convention that confirms intent.
+   - **Clearly intentional** — NatSpec describes this behavior, naming confirms it, or the pattern is a standard design choice (e.g., admin-controlled parameters, documented fee mechanisms, acknowledged centralization). → **DROP** with evidence citation: quote the specific NatSpec, comment, or naming convention that confirms intent. Exception: if the intentional behavior has non-obvious consequences for users or integrators, it may be reported as **Design Advisory** instead of being dropped.
    - **Ambiguous** — No clear documentation either way, or comments are stale/contradictory. → **Proceed** to Filter 1, but flag the ambiguity for adversarial review. Note what evidence you looked for and didn't find.
    - **Clearly unintentional** — Behavior contradicts NatSpec, violates naming conventions, or diverges from documented invariants. → **Proceed** to Filter 1.
 
-3. **Scope**: This gate applies at ALL severity levels, including Low and Informational. A code pattern that is clearly by-design is not a finding at any severity — it is a design choice. However, design choices with non-obvious consequences for users/deployers may still be reported as Informational if the consequence is genuinely surprising.
+3. **Scope**: This gate applies at ALL severity levels, including Low and Informational. A code pattern that is clearly by-design is not a finding at any severity — it is a design choice. However, design choices with non-obvious consequences for users/deployers may be reported as **Design Advisory** if the consequence is genuinely non-obvious to users, integrators, or composing protocols.
 
 ---
 
@@ -71,23 +72,26 @@ Score each dimension from -3 to +1:
 
 **Mechanical verdict from sum**:
 - Sum <= -6 → **DISCARD** (protections are overwhelming)
-- Sum -5 to -1 → **DOWNGRADE** one confidence tier
-- Sum 0 to +2 → **EMIT** as-is
-- Sum >= +3 → **ESCALATE** one confidence tier
+- Sum -5 to -1 → **DOWNGRADE** one severity tier (e.g., High → Medium)
+- Sum 0 to +2 → **EMIT** at assessed severity
+- Sum >= +3 → **ESCALATE** one severity tier (e.g., Medium → High)
 
 **Skip this filter for Low/Informational findings.** They do not need adversarial scoring — their value is in flagging the code concern, not proving exploitability.
 
 ---
 
-## Confidence Calibration
+## Severity Assignment
 
-| Confidence | Evidence Required | Maps To |
-|------------|-------------------|---------|
-| 0.9+ | Fully-specified path — exact calls, values, profit amount. Could write PoC now. | `[100]` |
-| 0.7–0.9 | Complete path but one precondition unverified | `[85]` |
-| 0.5–0.7 | Plausible theory, multiple preconditions unverified | `[75]` |
-| 0.3–0.5 | Valid code concern, edge case, or design issue without full exploit chain | `[60]` |
-| < 0.3 | Speculative, no specific code identified | Do not report |
+Assign **one** severity label based on impact and exploitability. Do not use numeric scores.
+
+| Severity | When to assign |
+|----------|---------------|
+| **Critical** | Direct, unconditional fund theft or permanent protocol-wide DoS. Fully-specified attack path with positive profit, no preconditions beyond public access. |
+| **High** | Direct fund loss or privilege escalation with one verifiable precondition (e.g., victim approval, specific market state). Complete attack path with quantified impact. |
+| **Medium** | Conditional fund risk, griefing, recoverable DoS, or state corruption. Requires specific but plausible preconditions. Profit can be indirect. |
+| **Low** | Valid code issue with edge-case impact, future risk, or dependency on unlikely preconditions (non-standard tokens, admin misconfiguration). Specific code location required. |
+| **Design Advisory** | Documented design decision whose consequences are non-obvious to users, integrators, or composing protocols. The behavior is intentional (would pass Filter 0 as "clearly intentional") but the consequence is genuinely surprising or has user-facing risk not surfaced by documentation. |
+| **Informational** | Code smell, deviation from best practice, design consequence, or non-obvious mechanism interaction. No attack path required — but must be a true valid observation. |
 
 ---
 
@@ -104,7 +108,9 @@ Assign the tier of the HARDEST prerequisite in the chain. This caps the maximum 
 | 4 | Attacker needs protocol role | Low |
 | 5 | Admin key compromise required | Low (report only if mechanism is concrete) |
 
-Low/Informational findings are not subject to prerequisite tier capping — their value is in documenting the concern regardless of exploitability.
+Low/Informational findings are not subject to prerequisite tier capping — their value is in documenting the concern regardless of exploitability. Design Advisory findings are also not subject to prerequisite tier capping — they document design decisions, not exploits.
+
+**Trust model override**: When a trust model is provided (see Stage 2 of the orchestrator), the trust model's severity ceilings take precedence over generic tier ceilings for protocol-specific roles.
 
 ---
 
@@ -122,6 +128,13 @@ Low/Informational findings are not subject to prerequisite tier capping — thei
 - State corruption with admin recovery path
 - Governance manipulation with concrete mechanism
 - **Requires**: 3 gates (profit can be indirect — blocked functionality, degraded security)
+
+### Design Advisory
+- Irrevocable actions that users might not realize are permanent
+- Trust boundaries where a constrained role has more power than users expect
+- Mechanism interactions that are documented but whose emergent consequences are non-obvious
+- Composability constraints that would surprise integrating protocols
+- **Requires**: specific code location + citation of documented design intent (NatSpec quote, comment, or naming convention) + explanation of the non-obvious consequence. No attack path required. Does not go through Three Hard Gates or 6D Scoring.
 
 ### Low
 - Unbounded array growth that doesn't currently iterate but could in future upgrades
@@ -153,6 +166,7 @@ Low/Informational findings are not subject to prerequisite tier capping — thei
 - Theoretical issues requiring implausible preconditions (compromised compiler, >50% token supply)
 - Framework behavior documented in OZ/Solmate/Solady library docs (unless wrapper adds new risk)
 - Constructor parameter validation on immutables
+- Design decisions with obvious, well-documented consequences — use Design Advisory only when the consequence is non-obvious or surprising
 
 **Note**: Common ERC-20 behaviors (fee-on-transfer, rebasing, blacklisting, pausing) are NOT implausible — if the code accepts arbitrary tokens, these are valid attack surfaces.
 
@@ -171,8 +185,6 @@ Before writing any Critical/High/Medium finding, answer:
 - Attacker profit: [$ value or ratio — for griefing/DoS, state "none, griefing only"]
 - Assumptions:    [conditions assumed but not verified; what validation would confirm or disprove]
 ```
-
-Uncertainty is itself information — it tells the reader who should intervene next and what validation is worth running. Always state what you assumed and what you could not verify.
 
 For Critical/High: attacker profit must be positive. For Medium: profit can be "none" if impact is griefing, DoS, or state corruption. Not required for Low/Informational.
 
