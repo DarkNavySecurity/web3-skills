@@ -8,26 +8,32 @@ A Claude Code skill for security auditing of blockchain node implementations. Co
 
 ## What it does
 
-The skill provides **auditor expertise as a handbook** — distilled knowledge from real blockchain client vulnerabilities across 20+ ecosystems. Instead of prescribing a fixed workflow, it gives the agent:
+The skill runs a **structured 7-stage audit** using an orchestrator + subagent architecture. The main context acts as coordinator and never reads source code or pattern files directly — all deep analysis is delegated to specialized subagents that write findings to disk as they confirm them.
 
+**Stages:**
+1. **Setup** — creates output directories, records audit parameters
+2. **Recon** — maps codebase structure, entry points, trust boundaries, and applicable patterns
+3. **Hunt** — parallel subagents analyze assigned subsystems against 20 vulnerability pattern families
+4. **Cross-subsystem** — traces trust boundary mismatches at subsystem call sites
+5. **Validation** — deduplicates findings, applies severity override rules
+6. **Adversarial review** *(deep mode)* — Red Team / Blue Team / Judge protocol for HIGH+ findings
+7. **Report** — consolidated report from disk state
+
+**Knowledge base:**
 - **20 vulnerability pattern families** covering input validation, consensus correctness, resource exhaustion, memory safety, concurrency, serialization, and more
 - **7 structured analysis lenses** for systematically examining code at trust boundaries
 - **Heuristic strategies** for finding bugs that patterns alone won't catch
 - **A judgment framework** with false-positive gates, confidence scoring, and severity classification
-- **An adversarial review protocol** (Red Team / Blue Team / Judge) for stress-testing high-severity findings
-
-The agent reads the handbook and applies its own judgment to decide what to analyze, how deep to go, and when to stop.
 
 ---
 
 ## Design philosophy
 
-- **Knowledge over process.** The skill's value is in what it knows (vulnerability patterns, analysis techniques, judgment frameworks), not in what steps it prescribes.
-- **Handbook, not workflow.** Written for an intelligent reader with judgment, not for a machine executing a pipeline.
-- **Findings flow continuously.** Confirmed findings are written to disk as they're verified, not held until the end.
+- **Orchestrator + worker.** The main context stays lean — it coordinates and validates but never reads source code or pattern files. Subagents do all the deep work. This allows the audit to complete on large codebases (70K+ lines) without context compaction.
+- **Handbook, not pipeline.** Hunt agents receive the full vulnerability handbook and explore freely — patterns, checklists, and heuristics are references to consult, not a sequence to execute. The agent decides what to read, where to dig, and when to stop.
+- **Findings flow continuously.** Confirmed findings are written to disk as they're verified, not held until the end. The audit is resumable if interrupted.
 - **Honest coverage over false completeness.** "3 confirmed findings in P2P handlers; consensus subsystem not analyzed" beats "comprehensive audit, 100% coverage" that isn't true.
 - **Highest risk first.** Spend time proportional to risk (per the trust boundary model), not proportional to code volume.
-- **Delegate hypotheses, not territories.** Sub-agents get specific questions about specific code, not open-ended subsystem assignments.
 
 ---
 
@@ -109,7 +115,20 @@ Install skill https://github.com/DarkNavySecurity/skills/client-auditor
 
 ---
 
-## Output format
+## Output
+
+All output is written to `audit/` in the working directory:
+
+```
+audit/
+  metadata.md          — audit parameters (target, date, mode)
+  manifest.md          — recon output: subsystem map, entry points, applicable patterns
+  findings/[ID].md     — one file per confirmed finding, written as confirmed
+  progress/[name].md   — subsystem checkpoints (for resume after interruption)
+  report.md            — final consolidated report
+```
+
+Run `ls audit/findings/` at any time during the audit to see confirmed findings as they land.
 
 Each finding includes:
 
