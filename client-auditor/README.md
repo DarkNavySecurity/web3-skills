@@ -42,7 +42,7 @@ The skill runs a **structured 7-stage audit** using an orchestrator + subagent a
 Follow the [Claude Code skills installation guide](https://docs.anthropic.com/en/docs/claude-code/skills).
 
 ```
-Install skill https://github.com/DarkNavySecurity/skills/client-auditor
+Install skill https://github.com/DarkNavySecurity/web3-skills/client-auditor
 ```
 
 ---

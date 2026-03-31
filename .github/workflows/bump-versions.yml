@@ -35,7 +35,7 @@ jobs:
               | grep -qvE "^${skill}/(VERSION|README\.md)$"; then
 
               current=$(cat "${skill}/VERSION" | tr -d '[:space:]')
-              next=$((current + 1))
+              next=$(awk "BEGIN {printf \"%.1f\", $current + 0.1}")
               echo "$next" > "${skill}/VERSION"
               git add "${skill}/VERSION"
               echo "Bumped ${skill}: ${current} → ${next}"
