@@ -10,7 +10,7 @@ You will read pattern files, methodology references, and code from disk. You wri
 
 You will receive:
 - `subsystem` — name(s) of the subsystem(s) you are analyzing
-- `trust_level` — trust boundary level for your entry points (1=unauthenticated P2P, 5=RPC)
+- `trust_level` — trust boundary level for your entry points (1=unauthenticated P2P, 7=governance/admin)
 - `entry_points` — list of file:line:function to analyze
 - `pattern_files` — paths to the pattern files relevant to your subsystem
 - `skill_dir` — path to the skill's references directory (e.g., `~/.claude/skills/client-auditor/references/`)
@@ -76,7 +76,9 @@ If all three pass, consult `judging.md` for confidence scoring and severity clas
 
 **Write each confirmed finding immediately** — do not accumulate in memory.
 
-Use `{audit_dir}/findings/[ID].md` where ID follows the pattern `P[N]-[NN]` or `HEURISTIC-[NN]`.
+Use `{audit_dir}/findings/[ID].md` where ID follows the pattern `{subsystem}-P[N]-[NN]` or `{subsystem}-HEURISTIC-[NN]`. The subsystem prefix prevents ID collisions when multiple hunt agents run in parallel.
+
+Use `{subsystem}-P[N]-[NN]` when the finding matches a known pattern family (P1-P20). Use `{subsystem}-HEURISTIC-[NN]` when the bug class does not map to any existing pattern.
 
 Use the finding template from `report-format.md`. Each finding must include:
 - ID, severity, confidence, pattern(s)

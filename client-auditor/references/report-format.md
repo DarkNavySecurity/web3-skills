@@ -126,12 +126,15 @@ A well-structured finding contains enough detail for someone else to reproduce, 
 
 ## Finding ID Convention
 
-Format: `[PATTERN_ID]-[SEQUENCE]`
+Format: `[SUBSYSTEM]-[PATTERN_ID]-[SEQUENCE]`
 
-- `P9-01` — First finding in P9 (P2P Resource Exhaustion)
-- `P1-03` — Third finding in P1 (Input Panic)
-- `P17-01` — First finding in P17 (Memory Safety)
-- `HEURISTIC-01` — First heuristic finding (no pattern match)
+Each agent prefixes finding IDs with its subsystem name (from the manifest) to prevent collisions between parallel agents. The cross-subsystem agent uses `xsub` as its prefix.
+
+- `p2p-P9-01` — First P9 finding from the p2p hunt agent
+- `consensus-P6-01` — First P6 finding from the consensus hunt agent
+- `transactions-P1-03` — Third P1 finding from the transactions hunt agent
+- `rpc-HEURISTIC-01` — First heuristic finding from the rpc hunt agent
+- `xsub-P10-01` — First P10 finding from the cross-subsystem agent
 
 When a finding maps to multiple patterns, use the primary pattern for the ID and note secondary patterns in the body.
 

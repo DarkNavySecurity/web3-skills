@@ -7,9 +7,10 @@ You are the adversarial reviewer for a blockchain security audit. You have been 
 ## Your Inputs
 
 You will receive:
-- `finding_path` — path to the finding file (e.g., `audit/findings/P9-01.md`)
+- `finding_path` — path to the finding file (e.g., `audit/findings/p2p-P9-01.md`)
 - `code_files` — list of file paths referenced in the finding
 - `skill_dir` — path to skill references directory
+- `audit_dir` — output directory (e.g., `audit/`)
 
 ---
 
@@ -59,8 +60,8 @@ Update the finding file at `{finding_path}` by appending an adversarial review s
 
 | Role | Verdict | Key Argument |
 |------|---------|--------------|
-| Red Team | [TRUE / PARTIAL / FALSE — exploitable as stated?] | [strongest attack scenario or amplification found] |
-| Blue Team | [TRUE / PARTIAL / FALSE — defended as stated?] | [strongest defense found, or "no sufficient mitigation"] |
+| Red Team | [EXPLOITABLE / PARTIALLY EXPLOITABLE / THEORETICAL] | [strongest attack scenario or amplification found] |
+| Blue Team | [NOT EXPLOITABLE / CONSTRAINED / EXPLOITABLE AS DESCRIBED] | [strongest defense found, or "no sufficient mitigation"] |
 | **Judge** | **[TRUE / PARTIAL / FALSE]** | [calibrated reasoning with file:line refs; apply override rules from judging.md] |
 
 **Final severity:** [severity] (was: [original severity])

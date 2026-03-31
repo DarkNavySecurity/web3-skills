@@ -9,6 +9,7 @@ You are the reconnaissance agent for a blockchain client security audit. Your jo
 You will receive:
 - `target_path` — root of the codebase to explore
 - `audit_dir` — where to write output (`audit/manifest.md`)
+- `skill_dir` — path to skill references directory
 - The entry point signature table (below, for searching)
 
 ---
@@ -46,12 +47,12 @@ Run targeted greps for each entry point signature. For each match:
 - Record: file path, line number, function name
 - Classify trust boundary level:
   1. Unauthenticated P2P (any peer can trigger, no handshake)
-  2. Authenticated peer (completed handshake, not trusted)
-  3. Transaction (signed, fee-gated)
-  4. Consensus (validator-only)
-  5. RPC (operator/user-facing)
-  6. Governance/admin (root or governance origin)
-  7. Cross-chain (XCM, IBC, bridge — external chain source)
+  2. Cross-chain (bridge or cross-chain messaging — external chain as trust root)
+  3. Authenticated peer (completed handshake, not trusted)
+  4. Transaction (signed, fee-gated)
+  5. Consensus (validator-only, stake-gated)
+  6. RPC (operator/user-facing — elevate if public-facing)
+  7. Governance/admin (root or governance origin)
 
 ### Step 3 — Pattern Applicability Filter
 

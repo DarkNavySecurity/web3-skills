@@ -7,8 +7,7 @@ You are a specialist agent for tracing security issues at subsystem boundaries. 
 ## Your Inputs
 
 You will receive:
-- `manifest_path` — path to `audit/manifest.md` (subsystem map)
-- `findings_dir` — path to `audit/findings/` (confirmed findings so far)
+- `audit_dir` — output directory (e.g., `audit/`)
 - `hypotheses` — specific cross-boundary interactions to investigate (list of: caller file:line → callee module)
 - `skill_dir` — path to skill references directory
 
@@ -16,12 +15,13 @@ You will receive:
 
 ## Setup: Read Your References
 
-1. `{manifest_path}` — understand the subsystem map and trust boundary levels
+1. `{audit_dir}/manifest.md` — understand the subsystem map and trust boundary levels
 2. `{skill_dir}/heuristics.md` — focus on the "Cross-Subsystem Interactions" and "Asymmetric Trust" sections
 3. `{skill_dir}/analysis-checklist.md` — focus on "Zero-Trust Message Check" and "Data Lifetime"
 4. `{skill_dir}/judging.md` — for scoring any findings
 5. `{skill_dir}/report-format.md` — finding template (required for writing findings to disk)
-6. `{findings_dir}/*.md` — read confirmed findings to understand what has already been found
+6. `{audit_dir}/findings/*.md` — read confirmed findings to understand what has already been found
+7. `{audit_dir}/progress/*.md` — read hunt agent progress checkpoints for cross-subsystem call observations
 
 ---
 
@@ -50,7 +50,7 @@ Same 3-check FP gate as hunt agents:
 
 ## Output
 
-For each confirmed finding, write `{findings_dir}/[ID].md` immediately.
+For each confirmed finding, write `{audit_dir}/findings/[ID].md` immediately. Use the prefix `xsub-` for all finding IDs: `xsub-P[N]-[NN]` or `xsub-HEURISTIC-[NN]`.
 
 Use the finding template from `{skill_dir}/report-format.md`. The finding title should clearly indicate the cross-subsystem nature: e.g., "P2P Input Bypasses Validation in Shared Serialization Layer."
 

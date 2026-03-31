@@ -33,12 +33,12 @@ You are the **orchestrator** for a blockchain client security audit. You coordin
 These are read **only by subagents**. The orchestrator's context budget is reserved for coordination.
 
 **Files the orchestrator MAY read:**
-- `references/judging.md` (Stage 5 — final severity validation)
+- `references/judging.md` (Stage 5 — dedup and severity validation)
 - `references/report-format.md` (Stage 7 — report assembly)
 - `references/agents/*.md` (just-in-time, before spawning each agent type)
 - `audit/manifest.md` (recon output)
 - `audit/progress/*.md` (subsystem checkpoints)
-- `audit/findings/*.md` (confirmed findings, for dedup — see Stage 5 limit)
+- `audit/findings/*.md` (individual findings as needed for report assembly)
 - `audit/metadata.md` (audit parameters)
 
 **Why these rules exist — and the rationalizations to resist:**
@@ -68,7 +68,7 @@ Use this table to determine which pattern files to assign to each hunt agent. Yo
 | P7 | RPC Crash | RPC endpoints | patterns-2 |
 | P8 | Fee Errors | Fee system, gas metering | patterns-2 |
 | P9 | P2P DoS | P2P handlers, mempool | patterns-3 |
-| P10 | Bridge Integrity | XCM, IBC, bridge handlers | patterns-3 |
+| P10 | Bridge Integrity | Cross-chain, bridge handlers | patterns-3 |
 | P11 | Unbounded Compute | Block finalization, on_initialize | patterns-3 |
 | P12 | ZK Circuits | ZK prover/verifier code | patterns-3 |
 | P13 | Charge Order | VM, host-VM bridge, gas | patterns-4 |
@@ -89,15 +89,7 @@ Use this table to determine which pattern files to assign to each hunt agent. Yo
 ~/.claude/skills/client-auditor/references/patterns/client-attack-patterns-5.md  → P17-P20
 ```
 
-**Applicability quick-check** (skip patterns where condition is false):
-- P3: skip unless EVM layer exists
-- P5: skip unless on-chain voting/governance exists
-- P9: skip unless P2P networking code exists
-- P10: skip unless bridge/XCM/IBC exists
-- P12: skip unless ZK circuits exist
-- P17: skip unless `unsafe` Rust, C/C++, or FFI exists
-- P18: skip unless multi-threaded or async-with-shared-state exists
-- P19: skip unless C/C++ or inline assembly exists
+The recon agent filters pattern applicability and records applicable IDs in the manifest. Read applicable IDs from the manifest in Stage 2 — do not re-evaluate applicability here.
 
 ---
 
@@ -105,15 +97,15 @@ Use this table to determine which pattern files to assign to each hunt agent. Yo
 
 ### Trust Boundary Model
 
-Prioritize analysis by trust level — higher trust = more dangerous, larger attacker population.
+Prioritize analysis by trust level — lower trust level number = more dangerous, higher priority. This is a default reference ordering; hunt agents may adjust per-project based on recon findings.
 
 1. **Unauthenticated P2P messages** — Any node on the network. No handshake, no stake. Highest risk.
-2. **Authenticated peer messages** — Completed handshake, any peer. Still high risk.
-3. **Transaction processing** — Signed by user, fee-gated. Medium-high risk.
-4. **Consensus protocol messages** — Validator-only. Lower frequency, higher impact.
-5. **RPC endpoints** — Node operators/users. Risk depends on public exposure.
-6. **Governance/admin** — Root or governance origin. Usually trusted, but admin-only bugs still matter.
-7. **Cross-chain (XCM/IBC/bridge)** — External chain as origin. Trust depends on relay chain security.
+2. **Cross-chain messages** — External chain or bridge as origin. Trust depends on systems you cannot control or audit.
+3. **Authenticated peer messages** — Completed handshake, any peer. Low barrier to become a peer.
+4. **Transaction processing** — Signed by user, fee-gated. Large attacker population but economically constrained.
+5. **Consensus protocol messages** — Validator-only, stake-gated. Small attacker set, high impact when exploited.
+6. **RPC endpoints** — Node operators/users. Deployment-dependent exposure; elevate if publicly reachable.
+7. **Governance/admin** — Root or governance origin. Smallest attacker population, highest barrier to exploit.
 
 ### Entry Point Signatures by Framework
 
@@ -124,7 +116,7 @@ Prioritize analysis by trust level — higher trust = more dangerous, larger att
 | Consensus hooks | `on_initialize`, `on_idle` | `PrepareProposal`, `ProcessProposal` | `VerifyHeader` | `handle_vote` |
 | P2P handlers | `handle_protocol_message` | `Receive`, `OnReceive` | `Handle`, `handleMsg` | `handle_gossip` |
 | RPC endpoints | `rpc_methods`, `#[rpc]` | `RegisterRoutes`, `NewQuerier` | `RegisterApis` | `register_rpc` |
-| XCM/cross-chain | `xcm_execute`, `transact` | `OnRecvPacket` | — | — |
+| Cross-chain | `xcm_execute`, `transact` | `OnRecvPacket` | — | — |
 
 ---
 
@@ -175,18 +167,20 @@ Extract and hold in context (small structured values only):
 - Recommended agent allocation
 - Cross-subsystem interaction list
 
+If the manifest contains no subsystem groups, halt immediately: `Audit halted: recon found no entry points in {target-path}. Verify the path is correct and the codebase uses a supported framework (Substrate, Cosmos SDK, geth-fork, or C/C++ node).`
+
 ### Stage 3 — Delegated Hunting
 
 Read `~/.claude/skills/client-auditor/references/agents/hunt-agent.md`.
 
-For each subsystem group from the manifest (highest trust level first = highest priority first):
+For each subsystem group from the manifest (lowest trust level number first — trust level 1 = unauthenticated P2P = highest priority):
 
 Spawn a hunt subagent with a prompt that includes:
 - The full text of `hunt-agent.md`
 - `subsystem: {group name}`
 - `trust_level: {level from manifest}`
-- `suggested_entry_points:` [hints from manifest — where to start, not an exhaustive list]
-- `pattern_files:` [all applicable pattern file paths — agent decides what to focus on]
+- `entry_points:` [list of file:line:function from the manifest for this subsystem]
+- `pattern_files:` [pattern file paths assigned to this subsystem group in the manifest]
 - `skill_dir: ~/.claude/skills/client-auditor/references/`
 - `audit_dir: audit/`
 
@@ -202,38 +196,41 @@ Read `~/.claude/skills/client-auditor/references/agents/cross-subsystem-agent.md
 
 Spawn a cross-subsystem agent with:
 - Full text of `cross-subsystem-agent.md`
-- `manifest_path: audit/manifest.md`
-- `findings_dir: audit/findings/`
+- `audit_dir: audit/`
 - `hypotheses:` [the cross-subsystem interaction list from manifest]
 - `skill_dir: ~/.claude/skills/client-auditor/references/`
 
-### Stage 5 — Validation and Dedup
+### Stage 5 — Dedup and Severity Validation
 
 List `audit/findings/`. If empty, skip to Stage 7.
 
-If **≤ 15 findings**, read them directly and apply deduplication:
-- Same function + same bug → merge, keep highest severity
-- Same pattern + different entry points → keep separate, note shared root cause
-- Cascading findings → keep both, note dependency
+Read all finding files and `references/judging.md`. Apply these rules in order:
 
-If **> 15 findings**, spawn a dedup agent with: all finding file paths, the deduplication rules above, and `skill_dir` for `references/judging.md`. Have it write a `audit/findings/DEDUP-SUMMARY.md` and return only the merged list. Reading 15+ findings raw into orchestrator context risks re-inflating the budget this architecture was designed to protect.
+1. **Same function, same bug** — two findings at the same file:line with the same root cause → merge into one, keep highest severity, delete the superseded file.
+2. **Same pattern, different entry points** — keep separate, add `shared root cause with [other ID]` to each file.
+3. **Cascading dependency** — if finding B requires finding A as a precondition, keep both, add `cascading dependency: [other ID]` to each file.
 
-Read `references/judging.md` to validate severity classifications against override rules (admin cap, quorum cap, self-recovering cap). If any finding needs adjustment, update the file.
+Then validate every finding's severity against the override rules in `judging.md` (admin cap, trusted-party cap, quorum cap, self-recovering cap, impact ceiling, no-exploit-path cap). Update any finding file whose severity violates an override rule.
 
 ### Stage 6 — Adversarial Review (DEEP mode only)
 
 Read `~/.claude/skills/client-auditor/references/agents/adversarial-agent.md`.
 
-For each HIGH or CRITICAL finding, spawn an adversarial review agent with:
+For each HIGH or CRITICAL finding (already in context from Stage 5), spawn an adversarial review agent with:
 - Full text of `adversarial-agent.md`
 - `finding_path: audit/findings/{ID}.md`
-- `code_files:` [file paths referenced in the finding]
+- `code_files:` [file paths extracted from the finding's Location and Trigger Scenario fields]
 - `skill_dir: ~/.claude/skills/client-auditor/references/`
+- `audit_dir: audit/`
 
 ### Stage 7 — Report Assembly
 
 Read `references/report-format.md`.
-Read all `audit/findings/*.md`.
+
+If Stage 5 was skipped (no findings), write a report noting zero findings and include the coverage summary from `audit/progress/*.md`. Skip the rest of this stage.
+
+All finding files are already in context from Stage 5. If Stage 6 (adversarial review) ran, re-read any finding files that were modified to pick up updated severities.
+
 Read all `audit/progress/*.md` for coverage summary.
 
 Write final consolidated report to `audit/report.md`.
@@ -248,11 +245,12 @@ If context has been compacted and you have lost earlier conversation state, reco
 2. Read `audit/manifest.md` — recover subsystem map and agent allocation
 3. List `audit/progress/` — determine which subsystems are complete
 4. List `audit/findings/` — see confirmed findings so far
-5. Re-read the agent prompt file for the stage you are resuming into before spawning any agents:
+5. If `audit/report.md` exists → audit finished.
+6. Re-read the agent prompt file for the stage you are resuming into before spawning any agents:
    - Resuming Stage 3 → re-read `references/agents/hunt-agent.md`
    - Resuming Stage 4 → re-read `references/agents/cross-subsystem-agent.md`
    - Resuming Stage 6 → re-read `references/agents/adversarial-agent.md`
-6. Resume from the first subsystem not yet in `audit/progress/` at the appropriate stage
+7. Resume from the first incomplete stage. Stage 5 (dedup) is safe to re-run — it is idempotent.
 
 All state needed to continue is on disk. Do not re-read code or pattern files — delegate to subagents as before.
 
@@ -260,11 +258,11 @@ All state needed to continue is on disk. Do not re-read code or pattern files �
 
 ## Operating Principles
 
-**Highest risk first.** Unauthenticated P2P handlers (trust level 1-2) carry the most risk. Spend analysis budget proportional to trust level, not code volume.
+**Highest risk first.** Unauthenticated P2P and cross-chain handlers (trust level 1-2) carry the most risk. Spend analysis budget inversely proportional to trust level number — level 1 deserves the most budget, not code volume.
 
 **Honest coverage over false completeness.** Report what was analyzed and what wasn't. Coverage is a description of work done, not a metric to optimize.
 
-**Delegate hypotheses, not territories.** Subagent prompts specify: which file:line, which pattern to check, which defenses to verify. Not "analyze the P2P subsystem" but "check whether `handle_gossip` at `src/net.rs:88` validates message length before allocating, per P9 (P2P DoS)."
+**Targeted delegation.** Each hunt agent receives a subsystem territory with specific entry points and relevant patterns. The orchestrator does not re-analyze what it delegates — it trusts the manifest's entry points and the hunt agent's judgment within that scope.
 
 **Findings live on disk.** Every confirmed finding is written to `audit/findings/[ID].md` by the hunt agent that found it. The orchestrator reads findings from disk — never reconstructs them from memory.
 
@@ -274,7 +272,7 @@ All state needed to continue is on disk. Do not re-read code or pattern files �
 
 ## Deep Mode
 
-When `deep` is specified, Stage 6 (adversarial review) runs for all HIGH and CRITICAL findings. The Judge's verdict replaces the initial severity. Borderline MEDIUM findings may also be reviewed at your discretion.
+When `deep` is specified, Stage 6 (adversarial review) runs for all HIGH and CRITICAL findings. The Judge's verdict replaces the initial severity. Also review MEDIUM findings that have a confidence score ≥ 80 in their finding file, or where the finding notes a potential upgrade path to HIGH.
 
 ---
 
@@ -283,7 +281,7 @@ When `deep` is specified, Stage 6 (adversarial review) runs for all HIGH and CRI
 All output lives in `audit/`:
 - `audit/metadata.md` — audit parameters
 - `audit/manifest.md` — recon output (subsystem map)
-- `audit/findings/[ID].md` — individual findings (written by hunt agents as confirmed)
+- `audit/findings/[ID].md` — individual findings (written by hunt agents, updated in Stage 5 and 6)
 - `audit/progress/[subsystem].md` — subsystem checkpoints (written by hunt agents)
 - `audit/report.md` — final consolidated report
 
