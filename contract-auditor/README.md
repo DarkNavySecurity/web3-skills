@@ -20,6 +20,10 @@ The model is already a strong reasoner. The skill doesn't try to think for it �
 
 **Validation as discipline, not gatekeeping** — Every finding passes through a structured protocol (3-gate + 6D adversarial scoring) to prevent hallucinated vulnerabilities. DEEP mode adds a falsifier agent that challenges every finding with source-level verification. The goal is precision — not suppressing the model's instincts, but requiring it to show its work.
 
+## Install
+
+Follow the [root install instructions](../README.md#install), which installs all skills including this one.
+
 ## Usage
 
 ```bash
@@ -37,4 +41,38 @@ The model is already a strong reasoner. The skill doesn't try to think for it �
 /contract-auditor --file-output
 ```
 
-> Knowledge base informed by community research including [smart-contract-auditing-heuristics](https://github.com/OpenCoreCH/smart-contract-auditing-heuristics) and [smart-contract-vulnerabilities](https://github.com/kadenzipfel/smart-contract-vulnerabilities).
+## Pipeline
+
+```
+1. Reconnaissance    → discover .sol files, resolve skill references, create temp dir
+2. Context & Analysis → subagent builds context map + threat model + agent allocation plan
+3. Delegated Hunting → parallel hunt agents do DFS on assigned call paths
+4. Merge & Dedup     → deduplicate findings, assess coverage against entry point census
+5. Adversarial [deep] → falsifier agent challenges every finding with source verification
+6. Report            → severity-ranked findings + honest coverage summary
+```
+
+The orchestrator (main context) coordinates and validates but delegates all source code reading to subagents, keeping context lean for large codebases.
+
+## Output
+
+By default the report is printed to terminal. With `--file-output`, it is also written to `./{project-name}-contract-auditor-{timestamp}.md`.
+
+The report includes:
+- **Findings summary table** — sorted by severity (Critical / High / Medium / Low / Design Advisory / Informational)
+- **Detailed findings** — each with location, root cause, attack scenario, impact, existing mitigations, and recommended fix
+- **Coverage summary** — entry points analyzed vs. total, per contract, with notes on what was and wasn't covered
+
+Each finding passes a **3-gate false-positive check** (concrete execution path, external reachability, no sufficient existing guard) and **6D adversarial scoring** before inclusion.
+
+## Scope and limitations
+
+- Targets Solidity codebases (`.sol` files)
+- Works on single files, multi-file projects, and monorepos
+- Handles proxy patterns, cross-contract calls, and complex inheritance
+- Deep mode is slower — budget extra time for the adversarial falsifier pass
+- Formal verification and cryptographic implementation correctness are out of scope
+
+## References
+
+Knowledge base informed by community research including [smart-contract-auditing-heuristics](https://github.com/OpenCoreCH/smart-contract-auditing-heuristics) and [smart-contract-vulnerabilities](https://github.com/kadenzipfel/smart-contract-vulnerabilities).

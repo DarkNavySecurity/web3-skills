@@ -1,7 +1,5 @@
 # Blockchain Client Auditor
 
-![client-auditor overview](../images/client-auditor.jpg)
-
 A Claude Code skill for security auditing of blockchain node implementations. Covers execution clients, consensus clients, app-chain SDKs, bridges, and any codebase with P2P networking or consensus logic — written in Go, Rust, C/C++, etc.
 
 ---
@@ -39,11 +37,7 @@ The skill runs a **structured 7-stage audit** using an orchestrator + subagent a
 
 ## Install
 
-Follow the [Claude Code skills installation guide](https://docs.anthropic.com/en/docs/claude-code/skills).
-
-```
-Install skill https://github.com/DarkNavySecurity/web3-skills/client-auditor
-```
+Follow the [root install instructions](../README.md#install), which installs all skills including this one.
 
 ---
 
