@@ -1,5 +1,6 @@
 *.DS_Store
 .claude/
+.worktrees/
 
 # Analysis output directories
 exploit-investigator/reports
