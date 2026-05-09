@@ -19,9 +19,9 @@ The skill runs a **structured 7-stage audit** using an orchestrator + subagent a
 
 **Knowledge base:**
 - **20 vulnerability pattern families** covering input validation, consensus correctness, resource exhaustion, memory safety, concurrency, serialization, and more
-- **7 structured analysis lenses** for systematically examining code at trust boundaries
+- **7 code analysis lenses** for systematically reading code at trust boundaries (branch exhaustion, zero-trust message check, data lifetime, resource accounting, etc.)
 - **Heuristic strategies** for finding bugs that patterns alone won't catch
-- **A judgment framework** with false-positive gates, confidence scoring, and severity classification
+- **A judgment framework** with 3-lens confidence calibration (anchors, not gates), confidence scoring, and mechanical severity override rules
 
 ---
 
@@ -29,6 +29,7 @@ The skill runs a **structured 7-stage audit** using an orchestrator + subagent a
 
 - **Orchestrator + worker.** The main context stays lean — it coordinates and validates but never reads source code or pattern files. Subagents do all the deep work. This allows the audit to complete on large codebases (70K+ lines) without context compaction.
 - **Handbook, not pipeline.** Hunt agents receive the full vulnerability handbook and explore freely — patterns, checklists, and heuristics are references to consult, not a sequence to execute. The agent decides what to read, where to dig, and when to stop.
+- **Soft exploration, hard calibration.** Agents use judgment freely when investigating code and assessing candidates. Severity override rules apply mechanically — an agent cannot deviate from them without explicit documented reasoning in the finding file. The exploration layer is unconstrained; the output calibration layer is not.
 - **Findings flow continuously.** Confirmed findings are written to disk as they're verified, not held until the end. The audit is resumable if interrupted.
 - **Honest coverage over false completeness.** "3 confirmed findings in P2P handlers; consensus subsystem not analyzed" beats "comprehensive audit, 100% coverage" that isn't true.
 - **Highest risk first.** Spend time proportional to risk (per the trust boundary model), not proportional to code volume.
@@ -96,13 +97,13 @@ Follow the [root install instructions](../README.md#install), which installs all
 
 ### Analysis techniques
 
-- **Analysis checklist** — 7 lenses: branch exhaustion, zero-trust message check, data lifetime trace, quantitative resource accounting, missing-defense inventory, thread safety, memory safety
+- **Analysis checklist** — 7 code analysis lenses (for reading code): branch exhaustion, zero-trust message check, data lifetime trace, quantitative resource accounting, missing-defense inventory, thread safety, memory safety
 - **Heuristic strategies** — structural suspicion, complexity signals, temporal assumptions, cross-boundary data flow, cross-subsystem interactions, implicit global state
 - **Adversarial review** — Red Team / Blue Team / Judge protocol for stress-testing high-severity findings
 
 ### Judgment framework
 
-- **3-lens evaluation** — concrete execution path, external reachability, no sufficient existing guard (anchors for calibrating confidence, not pass/fail gates)
+- **3-lens confidence calibration** — concrete execution path, external reachability, no sufficient existing guard (anchors for calibrating confidence, not pass/fail gates)
 - **Confidence scoring** — start at 100, apply deductions for admin requirements, key compromise prerequisites, quorum thresholds, non-default config, partial mitigations, etc.
 - **Severity classification** — Critical (chain-wide, ≥80), High (≥70), Medium (40-69), Low (20-39), Info (<20)
 - **Severity override rules** — mechanical caps for admin-only, trusted-party key, quorum-required, self-recovering, and unreachable-path findings (calibrated against historical audit experience to prevent severity inflation)
@@ -159,3 +160,12 @@ The report opens with an executive summary, includes findings by severity, and c
 - For very large codebases, specify a subdirectory to focus the audit
 - Deep mode is slower; budget extra time for adversarial review
 - Cryptographic implementation correctness requires specialist review beyond pattern matching
+
+---
+
+## Contributing
+
+- **New vulnerability pattern:** Add to the appropriate `references/patterns/client-attack-patterns-N.md` and update the pattern routing table in `SKILL.md`.
+- **New agent type:** Add `references/agents/{name}-agent.md`, update the relevant stage in `SKILL.md`, and add a resume protocol entry.
+- **Heuristic or checklist improvement:** Edit `references/heuristics.md` or `references/analysis-checklist.md` directly — hunt agents read these as references.
+- **Judgment framework change:** Edit `references/judging.md`. Analytical lens changes are safe; severity override rule changes affect all audits and should be made conservatively.
