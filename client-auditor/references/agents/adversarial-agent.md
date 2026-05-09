@@ -44,7 +44,7 @@ Goal: Prove the finding is NOT exploitable (or less severe). Push severity DOWN.
 ### Judge
 Goal: Calibrate severity based on both perspectives.
 - Weigh Red Team's concrete attack paths against Blue Team's defenses
-- Apply override rules from `judging.md` (admin cap, quorum cap, self-recovering cap, etc.)
+- Apply the severity override rules from `judging.md` (impact ceiling, admin cap, trusted-party cap, quorum cap, self-recovering cap, no-exploit-path cap) — these are mechanical caps, not suggestions
 - Produce a final verdict: severity, confidence, and 1-2 sentence rationale
 
 ---

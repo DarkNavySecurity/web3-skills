@@ -73,3 +73,9 @@ Hidden shared state is where race conditions, resource exhaustion, and state cor
 - **Metrics and counters** — counters that grow without bound, especially those used in allocation decisions or comparisons. An attacker who can increment a counter to overflow can invert a comparison.
 - **Configuration state assumed immutable** — code that reads config once and assumes it doesn't change. If config can be updated at runtime (hot reload, admin RPC), cached config values may diverge from reality.
 - **Connection and peer state** — per-peer state stored in global structures. If peer disconnection doesn't clean up all state, reconnection can interact with stale state from the previous session.
+
+---
+
+## Pattern Cross-Reference
+
+Before assigning a `HEURISTIC` ID, check whether the bug maps to a known pattern family (P1-P20). If it does, use `{subsystem}-P[N]-[NN]` instead. `HEURISTIC` IDs are reserved for bug classes that genuinely don't fit any existing pattern.

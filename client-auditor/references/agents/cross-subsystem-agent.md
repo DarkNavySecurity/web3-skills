@@ -41,10 +41,14 @@ Also look for patterns the individual hunt agents may have flagged in their prog
 
 ## Finding Validation
 
-Same 3-check FP gate as hunt agents:
+Same 3-lens evaluation as hunt agents — anchors for calibrating confidence, not pass/fail gates:
 1. Concrete execution path with file:line references
 2. Externally reachable (can an attacker trigger the cross-boundary call?)
 3. No sufficient existing defense
+
+A finding weak on one lens but otherwise interesting can still be reported with explicit caveats and lower confidence.
+
+Consult `judging.md` for confidence scoring and severity classification. The severity override rules there apply mechanically — do not deviate from them without explicit reasoning recorded in the finding file.
 
 ---
 

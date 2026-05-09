@@ -33,12 +33,10 @@ You are the **orchestrator** for a blockchain client security audit. You coordin
 These are read **only by subagents**. The orchestrator's context budget is reserved for coordination.
 
 **Files the orchestrator MAY read:**
-- `references/judging.md` (Stage 5 — dedup and severity validation)
-- `references/report-format.md` (Stage 7 — report assembly)
 - `references/agents/*.md` (just-in-time, before spawning each agent type)
 - `audit/manifest.md` (recon output)
 - `audit/progress/*.md` (subsystem checkpoints)
-- `audit/findings/*.md` (individual findings as needed for report assembly)
+- `audit/findings/[ID].md` (specific findings as needed for targeted validation or Stage 6 setup)
 - `audit/metadata.md` (audit parameters)
 
 **Why these rules exist — and the rationalizations to resist:**
@@ -123,7 +121,7 @@ Prioritize analysis by trust level — lower trust level number = more dangerous
 ## Subagent Prompt Construction
 
 Every agent prompt must include:
-- Full text of the agent's instruction file (read just before spawning)
+- Full text of the agent's instruction file (read just before spawning), if the stage uses one
 - `skill_dir: ~/.claude/skills/client-auditor/references/`
 - `audit_dir: audit/`
 
@@ -188,52 +186,66 @@ Spawn a hunt subagent with a prompt that includes:
 
 After each agent returns, record its summary. Do not read raw code or full agent outputs — read only the structured summary it returns. If a finding sounds suspicious, read that specific `audit/findings/[ID].md` to validate it.
 
+List `audit/progress/`. For each subsystem group in `audit/manifest.md`, check whether a corresponding progress file exists with `status: complete`. If any group has no progress file or is not marked complete, log a warning: `WARNING: Subsystem {name} has no completion record — coverage gap.` Carry these warnings into the Coverage Summary of the final report.
+
 ### Stage 4 — Cross-Subsystem Analysis
 
-If `audit/manifest.md` lists cross-subsystem interactions:
+Read each `audit/progress/*.md` file. Collect any cross-subsystem call observations noted by hunt agents. Merge these with the cross-subsystem interaction list from `audit/manifest.md` to form a combined hypothesis list.
+
+If the combined hypothesis list is non-empty:
 
 Read `~/.claude/skills/client-auditor/references/agents/cross-subsystem-agent.md`.
 
 Spawn a cross-subsystem agent with:
 - Full text of `cross-subsystem-agent.md`
 - `audit_dir: audit/`
-- `hypotheses:` [the cross-subsystem interaction list from manifest]
+- `hypotheses:` [the combined hypothesis list]
 - `skill_dir: ~/.claude/skills/client-auditor/references/`
+
+Record the structured summary it returns.
 
 ### Stage 5 — Dedup and Severity Validation
 
 List `audit/findings/`. If empty, skip to Stage 7.
 
-Read all finding files and `references/judging.md`. Apply these rules in order:
+Read `~/.claude/skills/client-auditor/references/agents/dedup-agent.md`.
 
-1. **Same function, same bug** — two findings at the same file:line with the same root cause → merge into one, keep highest severity, delete the superseded file.
-2. **Same pattern, different entry points** — keep separate, add `shared root cause with [other ID]` to each file.
-3. **Cascading dependency** — if finding B requires finding A as a precondition, keep both, add `cascading dependency: [other ID]` to each file.
+Spawn a dedup subagent with a prompt that includes:
+- The full text of `dedup-agent.md`
+- `finding_files:` [all `audit/findings/*.md`]
+- `skill_dir: ~/.claude/skills/client-auditor/references/`
+- `audit_dir: audit/`
 
-Then validate every finding's severity against the override rules in `judging.md` (admin cap, trusted-party cap, quorum cap, self-recovering cap, impact ceiling, no-exploit-path cap). Update any finding file whose severity violates an override rule.
+Record the structured summary it returns. Do not read raw finding files in the orchestrator.
 
 ### Stage 6 — Adversarial Review (DEEP mode only)
 
 Read `~/.claude/skills/client-auditor/references/agents/adversarial-agent.md`.
 
-For each HIGH or CRITICAL finding (already in context from Stage 5), spawn an adversarial review agent with:
+For each HIGH or CRITICAL finding listed in the Stage 5 summary, read that specific `audit/findings/{ID}.md` to extract `code_files`, then spawn an adversarial review agent with:
 - Full text of `adversarial-agent.md`
 - `finding_path: audit/findings/{ID}.md`
 - `code_files:` [file paths extracted from the finding's Location and Trigger Scenario fields]
 - `skill_dir: ~/.claude/skills/client-auditor/references/`
 - `audit_dir: audit/`
 
+After each agent returns, record its summary.
+
 ### Stage 7 — Report Assembly
 
-Read `references/report-format.md`.
+If Stage 5 was skipped (no findings), write a brief `audit/report.md` noting zero findings. Read `audit/progress/*.md` for the coverage summary and include any carried-forward `WARNING:` messages. Halt here.
 
-If Stage 5 was skipped (no findings), write a report noting zero findings and include the coverage summary from `audit/progress/*.md`. Skip the rest of this stage.
+Read `~/.claude/skills/client-auditor/references/agents/report-agent.md`.
 
-All finding files are already in context from Stage 5. If Stage 6 (adversarial review) ran, re-read any finding files that were modified to pick up updated severities.
+Spawn a report subagent with a prompt that includes:
+- The full text of `report-agent.md`
+- `audit_dir: audit/`
+- `skill_dir: ~/.claude/skills/client-auditor/references/`
+- `dedup_summary:` [the Stage 5 dedup summary]
+- `adversarial_summaries:` [Stage 6 adversarial review verdicts, or empty if Stage 6 was skipped]
+- `warnings:` [coverage gap warnings from Stage 3, or empty if none]
 
-Read all `audit/progress/*.md` for coverage summary.
-
-Write final consolidated report to `audit/report.md`.
+Wait for the subagent to return, then verify `audit/report.md` was written.
 
 ---
 
@@ -249,7 +261,9 @@ If context has been compacted and you have lost earlier conversation state, reco
 6. Re-read the agent prompt file for the stage you are resuming into before spawning any agents:
    - Resuming Stage 3 → re-read `references/agents/hunt-agent.md`
    - Resuming Stage 4 → re-read `references/agents/cross-subsystem-agent.md`
+   - Resuming Stage 5 → re-read `references/agents/dedup-agent.md`
    - Resuming Stage 6 → re-read `references/agents/adversarial-agent.md`
+   - Resuming Stage 7 → re-read `references/agents/report-agent.md`
 7. Resume from the first incomplete stage. Stage 5 (dedup) is safe to re-run — it is idempotent.
 
 All state needed to continue is on disk. Do not re-read code or pattern files — delegate to subagents as before.
@@ -264,7 +278,7 @@ All state needed to continue is on disk. Do not re-read code or pattern files �
 
 **Targeted delegation.** Each hunt agent receives a subsystem territory with specific entry points and relevant patterns. The orchestrator does not re-analyze what it delegates — it trusts the manifest's entry points and the hunt agent's judgment within that scope.
 
-**Findings live on disk.** Every confirmed finding is written to `audit/findings/[ID].md` by the hunt agent that found it. The orchestrator reads findings from disk — never reconstructs them from memory.
+**Findings live on disk.** Every confirmed finding is written to `audit/findings/[ID].md` by the hunt agent that found it. The orchestrator reads specific findings from disk when needed — never reconstructs them from memory.
 
 **Cross-reference patterns.** If a finding touches multiple pattern families, note all applicable IDs. If two findings share a root cause, note the dependency.
 

@@ -1,51 +1,51 @@
 # Finding Judgment Criteria
 
-This document defines the false-positive gate and confidence scoring system used to evaluate findings from the pattern scan agents. Every finding must pass the FP gate before being scored, and every scored finding receives a severity classification.
+This document defines how findings from the pattern scan agents are evaluated and scored. The 3-lens evaluation is an analytical framework — use judgment when calibrating confidence. The severity override rules, in contrast, apply mechanically after analysis to prevent severity inflation; they are calibrated against historical audit experience and should not be deviated from without explicit reasoning.
 
 ---
 
-## 3-Check False Positive Gate
+## 3-Lens Evaluation Framework
 
-All three checks must pass. If any check fails, the finding is classified as FALSE POSITIVE and excluded from the report.
+Three lenses for calibrating confidence in a finding. They are anchors, not pass/fail gates. A finding weak on one lens is not automatically a false positive — report it with explicit caveats and reduced confidence, and let the reader decide. A finding weak on all three is usually noise.
 
-### Check 1: Concrete Execution Path
+### Lens 1: Concrete Execution Path
 
-There must be a concrete, traceable execution path from attacker-controlled input to the invariant break.
+Strength signal: a concrete, traceable execution path from attacker-controlled input to the invariant break.
 
-**Pass criteria:**
+**Strong signals:**
 - The path can be described as a sequence of function calls with specific file:line references
 - Each step in the path is reachable from the previous step (no dead code, no disabled features)
 - The attacker input that enters the path is specified (message type, RPC method, tx field, etc.)
 
-**Fail indicators:**
+**Weakness signals (note explicitly if reporting anyway):**
 - Path requires calling internal-only functions not reachable from any entry point
 - Path traverses code gated by compile-time flags that are off in production
 - Path requires state that cannot be constructed through any external interface
 
-### Check 2: External Reachability
+### Lens 2: External Reachability
 
-The entry point must be reachable by an external actor (peer, RPC caller, transaction submitter), not only by internal code paths.
+Strength signal: the entry point is reachable by an external actor (peer, RPC caller, transaction submitter), not only by internal code paths.
 
-**Pass criteria:**
+**Strong signals:**
 - The entry point is a P2P message handler, RPC endpoint, transaction processor, or consensus hook
 - The entry point can be reached without admin/operator credentials (or the finding explicitly notes the admin requirement)
 - The network path from attacker to entry point is specified
 
-**Fail indicators:**
+**Weakness signals (note explicitly if reporting anyway):**
 - Handler is only called from internal timers or maintenance routines
 - Entry point requires localhost access AND default config binds to localhost
 - Function is a test helper or debug-only path compiled out of release builds
 
-### Check 3: No Sufficient Existing Guard
+### Lens 3: No Sufficient Existing Guard
 
-No existing defense mechanism is sufficient to fully prevent the attack.
+Strength signal: no existing defense mechanism is sufficient to fully prevent the attack.
 
-**Pass criteria:**
+**Strong signals:**
 - Each claimed mitigation has been checked against the actual code
 - Mitigations are demonstrably insufficient (rate limit too high, size check on wrong field, etc.)
 - The finding survives layered defense analysis (all mitigations considered in combination)
 
-**Fail indicators:**
+**Weakness signals (note explicitly if reporting anyway):**
 - An existing check already validates the exact input that triggers the bug
 - Rate limiting reduces the attack below the impact threshold
 - The resource is bounded and the bound is enforced before the expensive operation
@@ -102,6 +102,8 @@ Start at 100 and apply deductions. Multiple deductions stack.
 | **Informational** | Design observation, defense-in-depth suggestion, or by-design behavior that warrants documentation | <20 |
 
 ### Severity override rules
+
+These rules apply mechanically after the analytical lenses and confidence scoring. They are calibrated against historical audit experience and prevent severity inflation; do not deviate without an explicit, documented reason in the finding file.
 
 1. **Never promote above the impact ceiling:** A finding that can only crash one node cannot be Critical, regardless of confidence.
 2. **Downgrade for design intent:** If the behavior is explicitly documented as a design trade-off with formal analysis, cap at Informational.

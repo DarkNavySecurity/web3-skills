@@ -102,10 +102,10 @@ Follow the [root install instructions](../README.md#install), which installs all
 
 ### Judgment framework
 
-- **3-check false-positive gate** — concrete execution path, external reachability, no sufficient existing guard
+- **3-lens evaluation** — concrete execution path, external reachability, no sufficient existing guard (anchors for calibrating confidence, not pass/fail gates)
 - **Confidence scoring** — start at 100, apply deductions for admin requirements, key compromise prerequisites, quorum thresholds, non-default config, partial mitigations, etc.
 - **Severity classification** — Critical (chain-wide, ≥80), High (≥70), Medium (40-69), Low (20-39), Info (<20)
-- **Override rules** — caps for admin-only, trusted-party key, quorum-required, self-recovering, and unreachable-path findings
+- **Severity override rules** — mechanical caps for admin-only, trusted-party key, quorum-required, self-recovering, and unreachable-path findings (calibrated against historical audit experience to prevent severity inflation)
 
 ---
 

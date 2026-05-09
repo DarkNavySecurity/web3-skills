@@ -51,24 +51,24 @@ Some questions worth keeping in mind as you explore:
 
 ---
 
-## Finding Validation: 3-Check FP Gate
+## Finding Validation
 
-Before reporting any finding, all three checks must pass. If any fails, discard the finding.
+Three lenses for assessing a candidate finding. Use them to calibrate where the finding sits on the confidence spectrum — they are not pass/fail gates. A finding weak on one lens but otherwise interesting can still be reported; note the weakness explicitly and lower the confidence accordingly. A finding weak on all three is usually noise — if you still think it has value, say why.
 
-**Check 1 — Concrete execution path**
-- There is a traceable path from attacker input → invariant break
-- Each step cites file:line
-- No dead code or disabled features in the path
+**Lens 1 — Concrete execution path**
+- Is there a traceable path from attacker input → invariant break?
+- Does each step cite file:line?
+- Is the path free of dead code or disabled features?
 
-**Check 2 — Externally reachable entry point**
-- The path starts from a real entry point (P2P, RPC, tx, XCM, etc.)
-- No validator-only or localhost-only assumption unless that's the trust level
+**Lens 2 — Externally reachable entry point**
+- Does the path start from a real entry point (P2P, RPC, tx, XCM, etc.)?
+- Are validator-only or localhost-only assumptions consistent with the stated trust level?
 
-**Check 3 — No sufficient existing defense**
-- Read the actual defense (don't assume it exists)
-- Size limits, rate limiting, authentication, existing checks — verify they don't already prevent the exploit
+**Lens 3 — No sufficient existing defense**
+- Have you read the actual defense, not assumed it exists?
+- Are size limits, rate limiting, authentication, existing checks demonstrably insufficient?
 
-If all three pass, consult `judging.md` for confidence scoring and severity classification. Apply all override rules.
+Consult `judging.md` for confidence scoring and severity classification. The severity override rules there apply mechanically and prevent inflation — do not deviate from them without explicit reasoning recorded in the finding file.
 
 ---
 
