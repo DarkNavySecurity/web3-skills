@@ -10,9 +10,9 @@ Web3 security skills kit for [Claude Code](https://docs.anthropic.com/en/docs/cl
 
 | Skill | Description |
 |-------|-------------|
-| [**contract-auditor**](./contract-auditor/) | DFS-based multi-agent audit for Solidity — context mapping, parallel hunt agents, adversarial validation |
-| [**client-auditor**](./client-auditor/) | 7-stage orchestrated audit for blockchain node codebases (Go, Rust, C/C++, etc) with 20 vulnerability pattern families |
-| [**exploit-investigator**](./exploit-investigator/) | Multi-agent pipeline for on-chain attack analysis with Analyst-Validator debate loop and optional Foundry PoC |
+| [**contract-auditor**](./contract-auditor/) | Solidity smart contract auditor — parallel hunt agents, adversarial review for high-severity findings |
+| [**client-auditor**](./client-auditor/) | Blockchain node auditor (Go, Rust, C/C++, etc.) — 20 vulnerability pattern families covering P2P, consensus, RPC, and memory safety, etc. |
+| [**exploit-investigator**](./exploit-investigator/) | On-chain exploit investigator — traces attack transactions, reconstructs exploit logic, optional PoC ⚠️ [requires Python env + API keys](./exploit-investigator/README.md#setup) |
 
 ## Track Record
 
@@ -22,7 +22,7 @@ Web3 security skills kit for [Claude Code](https://docs.anthropic.com/en/docs/cl
 - $1K earned on [Immunefi](https://immunefi.com/profile/DARKNAVY/) (1 Medium finding)
 - Independently discovered a vulnerability in [rippled](https://github.com/XRPLF/rippled) (XRP Ledger), officially acknowledged and patched
 
-**Onchain Exploit Analysis** — 40+ Artifacts in [web3-exploit-analysis](https://github.com/DarkNavySecurity/web3-exploit-analysis), also posted on [![X](https://img.shields.io/badge/Defi_Nerd-000000?logo=x&logoColor=white)](https://x.com/Defi_Nerd_sec)
+**Onchain Exploit Analysis** — 60+ Artifacts in [web3-exploit-analysis](https://github.com/DarkNavySecurity/web3-exploit-analysis), also posted on [![X](https://img.shields.io/badge/Defi_Nerd-000000?logo=x&logoColor=white)](https://x.com/Defi_Nerd_sec)
 
 ## Install
 
