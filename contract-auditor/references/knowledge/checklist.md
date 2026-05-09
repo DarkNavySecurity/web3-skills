@@ -37,6 +37,7 @@ When you encounter a code pattern below during analysis, execute the correspondi
 | Blacklistable | transfer reverts, DoS on multi-user ops | single revert blocks batch? |
 | Returns false | silent failure without SafeERC20 | using SafeERC20? |
 | Zero-amount revert | unexpected revert on 0 transfer | amount validated > 0? |
+| Standard mismatch | integrator assumes ERC behavior that token/NFT/vault does not implement | verify return values, hooks, decimals, `preview` vs actual, and zero-address/zero-amount semantics? |
 
 ---
 
@@ -71,9 +72,24 @@ When you encounter a code pattern below during analysis, execute the correspondi
 
 ---
 
+## Revert / DoS Surface
+
+**Trigger**: `require`/custom errors after external input, push payments, batch operations, strict balance equality, arithmetic that can revert, division denominator, callbacks required for progress, liveness-critical keeper/user action
+
+1. **Single-recipient revert blocks all**: if a batch, auction, refund, withdrawal queue, or distribution requires every external transfer/callback to succeed, one reverting recipient can freeze progress. Prefer pull payments, per-recipient failure isolation, or bounded retries.
+2. **Unexpected balance**: strict checks like `address(this).balance == expected` or `token.balanceOf(this) == accounting` can be broken by forced ETH or direct ERC-20 transfers. Use internal accounting and tolerate surplus unless surplus is deliberately handled.
+3. **Checked arithmetic DoS**: Solidity >=0.8 overflow/underflow reverts. Check small integer types, `length - 1`, decrement-to-zero, signed min negation, and accumulators where a valid state can make future operations revert.
+4. **Division by zero**: every denominator derived from external input, oracle output, supply, reserves, elapsed time, or configurable parameters must be proven nonzero before division.
+5. **Liveness dependency**: if withdrawals, liquidations, reveals, oracle updates, or finalization depend on one actor calling within a window, ask whether that actor can disappear, be censored, or intentionally delay to lock funds or win value.
+6. **Failure state persistence**: when an operation catches or ignores a failed call, verify nonces, checkpoints, debt, queue indexes, and paid flags are not advanced as if the call succeeded.
+
+**NOT a DoS issue when**: the revert affects only the caller's own operation; progress is paginated and resumable; failed recipients can self-serve later; strict balance equality is only an invariant assertion unreachable by external value transfers.
+
+---
+
 ## Access Control
 
-**Trigger**: `external`/`public` state-changing function, `initialize()`, `init()`, modifier chain
+**Trigger**: `external`/`public` state-changing function, `initialize()`, `init()`, modifier chain, `tx.origin`, `code.length`, `extcodesize`
 
 1. Does this state-changing function have access control? If no modifier AND no inline `require(msg.sender == ...)` → flag
 2. `initialize()` / `init()`: has `initializer` modifier (OZ)? Or custom once-guard? Can be front-run if deploy and init are separate transactions?
@@ -82,8 +98,25 @@ When you encounter a code pattern below during analysis, execute the correspondi
 5. `delegatecall` target: is it user-controlled? If yes → attacker overwrites caller storage
 
 6. **Compliance bypass via auth-transfer**: privileged transfer functions (`authTransfer`, `forceTransfer`) that bypass compliance checks — trace all caller paths upward to external entry points. Can any user-facing function reach the privileged path indirectly? Does the calling contract enforce the compliance checks the bypassed role assumes?
+7. **`tx.origin` authorization**: if authorization depends on `tx.origin`, a malicious intermediate contract can call the target while preserving the victim EOA as `tx.origin`. Use `msg.sender` or explicit signed intent instead.
+8. **EOA-only gates**: `msg.sender.code.length == 0`, `tx.origin == msg.sender`, or `extcodesize == 0` does not prove a caller is an EOA. Contracts in construction have zero code length, account-abstraction wallets may be contracts, and EOA-only gates can break integrations while failing to stop adversaries.
 
 **NOT access control issue when**: function is intentionally permissionless (deposit, claim); access enforced in internal function called by all paths; atomic deploy+init via proxy constructor `_data`
+
+---
+
+## Time / Randomness
+
+**Trigger**: `block.timestamp`, `now`, `block.number`, `blockhash`, `block.prevrandao`, `block.difficulty`, lotteries, raffles, random IDs, time locks, expiries, emission windows, vesting, auctions, epoch transitions
+
+1. **Randomness source**: chain attributes are public before/at execution and may be biased by validators/builders. If funds, NFT rarity, lottery winners, or privileged selection depend on them, require VRF, commit/reveal with strong salt, or another unbiased source.
+2. **Same-transaction predictability**: can an attacker compute the "random" value in a contract call immediately before submitting the winning action? If yes, treat the value as attacker-known.
+3. **Timestamp tolerance**: if `block.timestamp` changes eligibility, price, fee, auction close, or liquidation outcome, quantify whether small timestamp drift or block-building choice changes who wins or how much value moves.
+4. **`block.number` as time**: block intervals vary across chains and after upgrades. Check whether using block count for vesting, interest, deadlines, or cooldowns can unlock too early/late on the target deployment chain.
+5. **Old blockhash**: `blockhash(n)` only works for recent blocks and returns zero outside the window. Check whether zero or a stale blockhash creates predictable outcomes or bypasses.
+6. **Deadline boundary**: verify `<=` vs `<` matches the intended final valid second/block. Boundary mistakes around expiry can enable one extra execution or premature denial.
+
+**NOT a time/randomness issue when**: time only gates low-value administrative scheduling with slack; randomness is not security-relevant; VRF or commit/reveal is correctly bound to sender, chain, contract, epoch, and a high-entropy salt.
 
 ---
 
@@ -110,6 +143,24 @@ When you encounter a code pattern below during analysis, execute the correspondi
 3. L2 sequencer: is sequencer uptime feed checked? (Arbitrum, Optimism)
 4. AMM spot price: `getReserves()` or `slot0()` is flash-loan manipulable. Need TWAP with sufficient window (>= 30 min)
 5. Decimal mismatch: oracle decimals vs token decimals. USDC=6, Chainlink ETH/USD=8, WBTC=8
+6. **Oracle update timing**: can an oracle/keeper update and a user operation execute in the same block or transaction? If a stale/old price is safe but a just-updated price is unsafe (or vice versa), check whether the protocol snapshots price, enforces heartbeat/deviation bounds, or gives users a delay/exit window.
+
+---
+
+## Transaction Ordering / MEV
+
+**Trigger**: swaps, liquidity add/remove, auctions, mints with limited supply, first-come queues, liquidations, claims/rewards, commit/reveal, `minOut`/`maxIn`, `deadline`, functions whose result depends on current price/reserves/queue position, keeper/oracle updates followed by user execution
+
+1. **Slippage bounds**: does the user supply `minAmountOut`, `maxAmountIn`, minimum shares, or equivalent? If output is computed from live reserves/oracles and no user bound exists, sandwich/front-run can extract value. Check that the bound is enforced against the actual received amount, not just a quoted amount.
+2. **Deadline / expiry**: does the user operation expire (`deadline`, block number, epoch)? If a signed order or swap can be executed indefinitely, stale prices or changed market conditions can be exploited. Deadlines must be checked before state changes.
+3. **Sandwich surface**: can an attacker move price before the victim and unwind after? Simulate: attacker trade -> victim execution at worse bound -> attacker backrun. If the victim's slippage is unbounded or protocol-set too wide, quantify extractable value.
+4. **Displacement / copy-trade**: does the transaction reveal a secret, winning answer, permit, route, salt, or bid before it is protected by state? If copying the calldata lets another caller claim the same reward or position first, require commit/reveal, sender binding, or delayed/batched settlement.
+5. **Commit/reveal binding**: commit hash must bind `msg.sender`, contract address, chain id, round/epoch, action parameters, and a high-entropy salt. Reveal must be in the correct phase, one-use, and unable to reveal in the same transaction/block if that defeats secrecy.
+6. **Queue ordering**: for FIFO queues, auctions, withdrawals, redemptions, and liquidations, can a user cancel/reinsert, split orders, spam dust, or pay more gas to jump priority? Check whether ordering is deterministic and whether griefing can suppress other users.
+7. **Privileged ordering**: can admin/keeper/oracle actions be ordered immediately before user execution to change fees, prices, caps, routes, or eligibility? If yes, check timelock, delay, snapshot, settle-before-change, and user exit protections.
+8. **Block stuffing / suppression**: if safety depends on another transaction landing soon (oracle update, liquidation, reveal, keeper call), can delaying it for several blocks create profit or user loss?
+
+**NOT an ordering issue when**: user-provided bounds are enforced on final output; batch auction or commit/reveal removes ordering advantage; oracle value is snapshotted before user commitment; operation is only admin-internal with no user-facing value impact.
 
 ---
 
@@ -129,15 +180,35 @@ When you encounter a code pattern below during analysis, execute the correspondi
 
 ## State & Data Structures
 
-**Trigger**: struct operations, mapping reads/writes, array push/pop/delete, storage vs memory keywords
+**Trigger**: struct operations, mapping reads/writes, array push/pop/delete, storage vs memory keywords, inheritance lists, overrides, shadowed names
 
 1. **Memory vs storage**: when a struct is loaded into a `memory` variable, modifications are on the copy — they are NOT written back to storage unless explicitly assigned. The only visible difference is the `memory`/`storage` keyword. If you see `Type memory x = storageMapping[key]; x.field = newVal;` — the storage is unchanged. Flag if no write-back follows
 2. **Duplicates in user-supplied lists**: when a function accepts an `address[]` or `uint256[]` from a caller and iterates it for balance queries, reward distribution, or voting — duplicates enable double-counting. Check: is uniqueness enforced? Is the list from a trusted source (admin) or untrusted (user)?
 3. **Swap-and-pop deletion**: deleting from an array by swapping with the last element changes TWO items — the deleted one and the moved one. The moved item now has a different index. If any external system or mapping tracks items by index, those references are now stale. Check: are there mappings keyed by array index? Does any event emit the index?
 4. **Mapping default confusion**: `mapping(key => value)` returns the zero value for unset keys. If `0` / `false` / `address(0)` is also a valid meaningful value, the contract cannot distinguish "never set" from "set to zero". Check: does the code use `value == 0` to mean "not initialized"? Could a legitimate value of 0 bypass that check?
 5. **Uninitialized state as sentinel**: checking `value == 0` or `address == address(0)` to detect "uninitialized" is fragile — 0 may be a valid initialized value, or a counter may decrement back to 0 after exhaustion. If the contract treats `value == 0` as "no limit set," exhausting the limit may re-enable unlimited access
+6. **Inheritance order**: in multiple inheritance, verify the actual linearization and overridden function chosen by Solidity. A base contract order change can alter access checks, hooks, storage initialization, or accounting side effects.
+7. **State variable shadowing**: if child and parent contracts use the same variable name or semantically identical variables, verify all reads/writes hit the intended slot. Shadowing can split authority, balances, or config across two variables that developers assume are one.
 
 **NOT a data structure issue when**: struct is explicitly declared as `storage` reference; array is only modified by admin with known-unique inputs; mapping default is handled with a separate `exists` flag
+
+---
+
+## Low-Level / Assembly / Storage Layout
+
+**Trigger**: `assembly`, Yul blocks, `sload`, `sstore`, `mload`, `mstore`, `calldatacopy`, `returndatacopy`, bit shifts/masks, packed fields, `delegatecall`, proxy fallback dispatch, custom storage slots, `bytes4` selectors, `abi.encodeWithSelector`, `msg.sig`, `fallback`, `receive`, `create`, `create2`, `selfdestruct`, `PUSH0`, chain-specific deployment
+
+1. **Assembly justification**: is low-level code necessary? If the same behavior can be safely expressed in Solidity and no gas/compatibility reason is documented, treat the assembly as high-risk and verify every opcode effect.
+2. **Memory safety**: when assembly writes memory, check free memory pointer `0x40`, scratch space, zero slot `0x60`, allocated length words, and bounds for `calldatacopy`/`returndatacopy`. Ensure returned dynamic data length cannot force unbounded memory expansion.
+3. **Storage slot correctness**: for `sload`/`sstore` or custom slots, verify slot constants, namespace uniqueness, and no collision with compiler-assigned storage, proxy slots, diamond storage, or inherited variables.
+4. **Upgradeable storage layout**: for proxy/UUPS/beacon/diamond systems, verify new variables are appended only, types/order of existing variables are unchanged, base contract storage changes do not shift child storage, storage gaps are preserved, and namespaced storage identifiers are unique.
+5. **Bit packing**: when multiple values share one word, verify masks clear old bits before `or`, shifts use the correct offset and width, signed values are sign-extended deliberately, and values are range-checked before packing to prevent field bleed.
+6. **Selector collision**: compute or reason about every externally routed `bytes4` selector in proxies, diamonds, routers, and fallback dispatch. Check for collisions between proxy admin functions and implementation functions, facet selectors, plugin modules, and manually specified selectors.
+7. **Fallback/receive dispatch**: fallback code must reject unknown selectors unless intentionally forwarding. If it forwards, verify target address is trusted, return data is bounded, `msg.value` handling is correct, and admin calls cannot accidentally delegate into user logic.
+8. **Delegatecall context**: `delegatecall` executes in the caller's storage context and preserves `msg.sender`/`msg.value`. Check user-controlled target/data, initializer locks, selfdestruct paths in implementation logic, and storage assumptions across caller/callee.
+9. **Target-chain opcode compatibility**: if the deployment chain is not Ethereum mainnet, or compiler/opcode choices are chain-sensitive, verify `PUSH0`, `CREATE/CREATE2`, `.transfer()` gas behavior, precompile availability, and chain-specific system-contract semantics. A contract safe on one EVM chain can be undeployable or fund-locking on another.
+
+**NOT a low-level issue when**: assembly is isolated, documented, has a high-level equivalent/test oracle, memory and returndata are bounded, and storage slots/selectors are mechanically derived from audited constants.
 
 ---
 
@@ -151,6 +222,28 @@ When you encounter a code pattern below during analysis, execute the correspondi
 4. Does the change interact with other mechanisms? (e.g., changing oracle address while positions are open)
 
 **NOT a config issue when**: change is behind a timelock or multisig; parameter has documented bounds enforced in the setter (e.g., `require(rate < MAX)`); contract is explicitly admin-trusted and finding only describes "admin can set X to Y" without a concrete attack path beyond trust assumption
+
+---
+
+## Governance / Admin Risk Matrix
+
+**Trigger**: `onlyOwner`, `onlyRole`, `AccessControl`, `Ownable`, `TimelockController`, `Governor`, `upgradeTo`, `upgradeToAndCall`, `pause`, `unpause`, `setOracle`, `setFee`, `setTreasury`, `sweep`, `emergencyWithdraw`, keeper/operator/guardian functions
+
+Build a matrix for every privileged role:
+
+| Role | Powers | Assets/users affected | Delay/multisig? | User exit? | Severity ceiling |
+|------|--------|----------------------|-----------------|------------|------------------|
+
+1. **Upgrade admin**: can it change logic for contracts holding funds? Check UUPS `_authorizeUpgrade`, transparent proxy admin separation, beacon blast radius, implementation initialization lock, storage compatibility, and whether users can exit before upgrade execution.
+2. **Timelock / governance executor**: verify proposer, executor, canceller, and admin roles are separated. Delay should cover the full user exit period. Check bypasses via emergency roles, direct proxy admin ownership, or `executeBatch` ordering.
+3. **Pauser / guardian**: document exactly what pauses. Can users still withdraw/exit? Can pauser permanently freeze funds, selectively grief users, or unpause into unsafe state?
+4. **Keeper / operator**: keepers should not choose arbitrary recipients, prices, routes, or amounts beyond bounded parameters. If liveness depends on keepers, check what happens when they are offline or maliciously delay.
+5. **Oracle / risk admin**: changing price feeds, LTVs, liquidation thresholds, caps, or asset lists should settle/snapshot dependent state first and enforce bounds. Check whether a parameter change can instantly liquidate users or make withdrawals impossible.
+6. **Treasury / sweeper**: sweep functions must not transfer user deposits, escrowed funds, reward pools, or tokens accidentally sent but later claimable. Check token allowlists and accounting exclusions.
+7. **Role lifecycle**: role grant/revoke/transfer should be access-controlled, two-step where appropriate, emit events, and avoid orphaning critical roles. Check whether compromised keys can be revoked without using the compromised role.
+8. **User exit path**: for each harmful but authorized action, ask whether users can detect it, have enough time to withdraw, and can still withdraw while paused or during upgrade/timelock delay.
+
+**Severity guidance**: if harm requires a fully trusted role acting maliciously and users accepted that trust model, cap at Low or Design Advisory. If code claims a role is constrained (timelock, bounds, proofs, multisig) but an implementation bug bypasses the constraint, assess normally.
 
 ---
 

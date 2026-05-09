@@ -31,10 +31,10 @@ Write your complete output (both sections: Challenge Results, Cross-Finding Inte
    - Tier 0: None (public, any EOA) → uncapped
    - Tier 1: Victim must sign/approve first → ceiling High
    - Tier 2: Specific market condition required → ceiling High
-   - Tier 3: Non-standard token behavior assumed → ceiling Low
+   - Tier 3: Non-standard token behavior assumed → ceiling Medium
    - Tier 4: Attacker needs protocol role → ceiling Low
    - Tier 5: Admin key compromise → dismiss
-   If prerequisite is Tier 4-5 and finding claims Critical/High → DOWNGRADE to Low.
+   If the claimed severity exceeds the prerequisite tier ceiling, DOWNGRADE to the ceiling. If prerequisite is Tier 5, DISPROVE unless the finding demonstrates a concrete on-chain mechanism beyond key compromise.
 
    **Check 3 — Guard Analysis**: Read every modifier on every function in the attack path. For each modifier, substitute the attacker's concrete values and check if the require/revert would fire. Also check for inline guards (`if (...) revert`, `require(...)`) you may have missed. **Payability gate**: if the attack path depends on `msg.value` (ETH forwarding, refund logic, or value-based checks), verify the entry-point function's signature includes `payable`; a non-payable function silently reverts on any `msg.value > 0`, killing the entire path. This applies especially to `multicall`/batch patterns where `msg.value` preservation via `delegatecall` is claimed — confirm the outer function is `payable` before accepting the premise. If any guard blocks the path → DISPROVE with guard citation.
 

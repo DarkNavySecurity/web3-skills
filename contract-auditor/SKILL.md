@@ -13,9 +13,11 @@ Mission: find every way to steal funds, lock funds, grief users, or break invari
 
 ## Mode Selection
 
-- **Default** (no arguments): scan all `.sol` files. Use Bash `find` (not Glob) to discover files.
-- **deep**: same scope as default, plus an adversarial falsifier agent to challenge every finding after merge.
+- **Default** (no arguments): scan production Solidity sources only. Use Bash `find` (not Glob) to discover files, excluding dependencies, generated artifacts, tests, scripts, and mocks.
+- **deep**: same production-source scope as default, plus an adversarial falsifier agent to challenge every finding after merge.
 - **`$filename ...`**: scan the specified file(s) only.
+
+**Default scope rule:** do not audit tests, scripts, mocks, dependencies, or generated artifacts unless the user explicitly passes those files by name. Exclude obvious dependency/generated paths such as `node_modules/`, root Foundry dependency roots `lib/` and `libs/`, `vendor/`, `dependencies/`, `out/`, `artifacts/`, `cache/`, `broadcast/`, `test/`, `tests/`, `script/`, `scripts/`, `mock/`, and `mocks/`. Do not blanket-exclude production-looking paths such as `src/**/lib` or `contracts/**/lib`; when uncertain, include first-party production code.
 
 **Flags:**
 
@@ -23,7 +25,7 @@ Mission: find every way to steal funds, lock funds, grief users, or break invari
 
 ## Version Check
 
-After printing the banner, run two parallel tool calls: (a) Read `~/.claude/skills/contract-auditor/VERSION`, (b) Bash `curl -sf https://raw.githubusercontent.com/DarkNavySecurity/web3-skills/main/contract-auditor/VERSION`. If the remote fetch succeeds and the versions differ, print:
+After printing the banner, run two parallel tool calls: (a) Read `~/.claude/skills/contract-auditor/VERSION`, (b) Bash `curl -sf --connect-timeout 2 --max-time 5 https://raw.githubusercontent.com/DarkNavySecurity/web3-skills/main/contract-auditor/VERSION`. If the remote fetch succeeds and the remote version is greater than the local version, print:
 
 > ⚠️ You are not using the latest version. Please upgrade for best security coverage.
 
@@ -38,6 +40,17 @@ Then continue normally. If the fetch fails (offline, timeout), skip silently.
 Print the banner, run the Version Check, then:
 
 1. Discover in-scope files: Bash `find` for `.sol` files per mode selection (or use specified filenames).
+   - Default/deep discovery command:
+     ```bash
+     find . \
+       \( -type d \( -name 'node_modules' -o -name 'vendor' -o -name 'dependencies' \
+          -o -name 'out' -o -name 'artifacts' -o -name 'cache' -o -name 'broadcast' \
+          -o -name 'test' -o -name 'tests' -o -name 'script' -o -name 'scripts' -o -name 'mock' -o -name 'mocks' \) \) -prune -o \
+       -type f -name '*.sol' \
+         ! -path './lib/*' ! -path './libs/*' \
+         ! -name '*.t.sol' ! -name '*.s.sol' ! -iname '*mock*.sol' -print
+     ```
+   - Do not audit tests, scripts, mocks, dependencies, or generated artifacts by default, including nested package directories in monorepos. Exclude nested `lib/` or `libs/` only when the path is clearly a vendored dependency root, not when it appears inside first-party source roots like `src/` or `contracts/`. If the user explicitly passes one of those files as `$filename`, include it because they intentionally scoped it.
 2. Resolve `{resolved_path}`:
    ```
    Set {resolved_path} = ~/.claude/skills/contract-auditor/references
@@ -45,7 +58,7 @@ Print the banner, run the Version Check, then:
    If Read fails: Glob **/contract-auditor/references/knowledge/checklist.md
      and derive {resolved_path} from the result (two levels up).
    ```
-3. Create a temp directory: `mkdir -p /tmp/contract-auditor-$(date +%Y%m%d-%H%M%S)` — capture as `{temp_dir}`.
+3. Create a temp directory with `mktemp -d "${TMPDIR:-/tmp}/contract-auditor.XXXXXX"` — capture as `{temp_dir}`. Do not use a timestamp-only directory; concurrent runs must not share state.
 
 **State checkpoint — preserve these values across context compaction:**
 - `temp_dir`: the created temp directory path
@@ -102,7 +115,12 @@ Agents read source files and references themselves via DFS traversal of their as
 
 ### Stage 4 — Merge, Dedup, and Coverage Assessment
 
-Read all agent output files from `{temp_dir}`.
+Read all agent output files from `{temp_dir}`. Each hunt output is structured as:
+- `# Confirmed Findings` — the only section to merge and deduplicate as findings
+- `# Dropped Candidates` — reasons candidates were rejected; do not merge these
+- `# Coverage` — coverage accounting only
+
+Do not treat text outside `# Confirmed Findings` as a finding.
 
 **Dedup** (you do this, leveraging your code understanding):
 1. Group findings by location (contract + function/line range)

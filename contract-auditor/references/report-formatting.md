@@ -84,7 +84,7 @@ Then `---` before the findings section.
 
 Each finding follows this exact structure, separated by `---`:
 
-```
+~~~~markdown
 ## [Severity] N. Title of Finding
 
 > `EntryContract.entryFunction(params)`
@@ -107,7 +107,7 @@ Each finding follows this exact structure, separated by `---`:
 ```
 
 ---
-```
+~~~~
 
 ### 3a — The `##` heading
 
@@ -224,7 +224,7 @@ Rules:
 
 **IMPORTANT: The example below is a formatting template only. Do NOT treat these as real findings or reproduce them in your output. Your findings must come exclusively from analyzing the actual source code.**
 
-```
+~~~~markdown
 # 🔐 contract-auditor — <ProjectName>
 
 `<File>.sol` · <mode> · <YYYY-MM-DD>
@@ -266,4 +266,4 @@ Rules:
 ```
 
 ---
-```
+~~~~

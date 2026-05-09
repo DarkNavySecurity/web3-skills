@@ -30,7 +30,9 @@ Output is a **directory of files** at `{context_dir}`, not a single file. Each f
 | {ContractName} | {path} | {count} | {count} | high/medium/low |
 ```
 
-#### `{ContractName}.md` (one per contract)
+#### `{safe-path}__{ContractName}.md` (one per contract)
+
+Use a path-stable filename so context files never collide. Derive `{safe-path}` from the source-relative path by replacing `/`, `\`, `.`, spaces, and other non-alphanumeric characters with `_`. Example: `src/tokens/Vault.sol` + `Vault` becomes `src_tokens_Vault_sol__Vault.md`.
 
 ```
 ## Contract: {ContractName}
@@ -71,11 +73,11 @@ Contains the State Coupling table and Adjacency List (see Call Path Graph sectio
 3. Map state architecture: key storage variables, who writes them, who reads them, what connects them (sentinels, invariants, coupled updates).
 4. Trace value flows: how do funds (ETH, tokens, shares) enter and exit? Which functions move value?
 5. Map cross-contract calls: which contracts call each other, at what lines, with what trust assumptions.
-6. Record observations: anything suspicious, unusual, or worth investigating — with specific `file:line` citations. These are your professional security judgment, not conclusions.
+6. Record observations: anything suspicious, unusual, or worth investigating — with specific `file:line` citations. These are your professional security judgment, not conclusions. Do not create first-class priority maps by vulnerability category; keep observations tied to concrete code locations and call paths.
 7. Write output files:
    - Create `{context_dir}` directory
    - Write `index.md` with project summary and contract table
-   - Write one `{ContractName}.md` for EVERY in-scope file — including libraries, utility contracts, and files with zero entry points. Libraries contain critical arithmetic, encoding, and storage logic that hunt agents must analyze. If a file has no entry points, its context file should still document its functions, internal logic, and which contracts call it.
+   - Write one `{safe-path}__{ContractName}.md` for EVERY contract/library/interface in every in-scope file. Multi-contract files produce multiple context files. Libraries contain critical arithmetic, encoding, and storage logic that hunt agents must analyze. If a file has no entry points, its context file should still document its functions, internal logic, and which contracts call it.
    - Write `call-paths.md` with all call path entries
    - Write `state-coupling.md` with the State Coupling table and Adjacency List
 
@@ -192,8 +194,8 @@ This table is the ground truth for coverage assessment. M = total external/publi
 **Assigned call paths:**
 {paste the full call path entries for this agent's paths, including all file:line detail and read/write annotations}
 
-**Primary files:** {list of ContractName.md files this agent owns}
-**Boundary files:** {list of ContractName.md files this agent calls into but does not own}
+**Primary files:** {list of safe-path__ContractName.md files this agent owns}
+**Boundary files:** {list of safe-path__ContractName.md files this agent calls into but does not own}
 
 **Cross-agent state hints:**
 | Variable | This Agent | Other Agent | Watch For |
