@@ -1,10 +1,10 @@
-# CLAUDE.md
+# AGENTS.md
 
-Instructions for Claude when contributing to this repository.
+Instructions for Codex when contributing to this repository.
 
 ## What This Repo Is
 
-A library of Web3 security skills for Claude Code. Each skill is a focused, self-contained capability for auditing smart contracts, blockchain clients, and on-chain incidents.
+A library of Web3 security skills for Codex. Each skill is a focused, self-contained capability for auditing smart contracts, blockchain clients, and on-chain incidents.
 
 ## Structure
 
@@ -12,7 +12,7 @@ A library of Web3 security skills for Claude Code. Each skill is a focused, self
 client-auditor/             # Security audit of blockchain client codebases (Go, Rust, C++)
 contract-auditor/           # Solidity security audit with adversarial reasoning and context building
 exploit-investigator/       # On-chain attack transaction analysis and incident reporting
-CLAUDE.md                   # This file (read by Claude Code)
+AGENTS.md                   # This file (read by Codex)
 ```
 
 ## Rules

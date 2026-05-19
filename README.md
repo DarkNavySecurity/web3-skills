@@ -2,17 +2,59 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Immunefi: $22K](https://img.shields.io/badge/Immunefi-$22K-4B275F.svg)](https://immunefi.com/profile/DARKNAVY/)
-[![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-F96854.svg)](https://docs.anthropic.com/en/docs/claude-code)
+[![Claude Code｜Codex](https://img.shields.io/badge/Claude_Code\|Codex-Skill-F96854.svg)](https://docs.anthropic.com/en/docs/claude-code)
 
-Web3 security skills kit for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — smart contract auditing, blockchain client auditing, and on-chain exploit investigation.
+Web3 security skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Codex](https://openai.com/codex) — smart contract auditing, blockchain client auditing, and on-chain exploit investigation.
 
 ## Skills
 
-| Skill | Description |
-|-------|-------------|
-| [**contract-auditor**](./contract-auditor/) | Solidity smart contract auditor — parallel hunt agents, adversarial review for high-severity findings |
-| [**client-auditor**](./client-auditor/) | Blockchain node auditor (Go, Rust, C/C++, etc.) — 20 vulnerability pattern families covering P2P, consensus, RPC, and memory safety, etc. |
-| [**exploit-investigator**](./exploit-investigator/) | On-chain exploit investigator — traces attack transactions, reconstructs exploit logic, optional PoC ⚠️ [requires Python env + API keys](./exploit-investigator/README.md#setup) |
+| Skill | Invoke | Description |
+|-------|--------|-------------|
+| [**contract-auditor**](./contract-auditor/) | `/contract-auditor [path] [deep]` | Solidity security auditor — DFS-based context mapping, parallel hunt agents, optional adversarial falsifier |
+| [**client-auditor**](./client-auditor/) | `/client-auditor start\|verify\|report [path] [deep]` | Blockchain node auditor (Go, Rust, C/C++) — three explicit phases covering 20+ vulnerability pattern families across P2P, consensus, RPC, and memory safety |
+| [**exploit-investigator**](./exploit-investigator/) | `/exploit-investigator 0x<tx> <chain>` | On-chain exploit investigator — traces attack transactions, reconstructs exploit logic, Analyst-Validator debate loop, optional Foundry PoC ⚠️ [requires Python env + API keys](./exploit-investigator/README.md#setup) |
+
+### contract-auditor
+
+```bash
+/contract-auditor                   # scan production Solidity sources
+/contract-auditor deep              # adds adversarial falsifier pass
+/contract-auditor src/Vault.sol     # review specific file(s)
+```
+
+### client-auditor
+
+```bash
+/client-auditor start [path]        # recon, hunt, inventory — stops at findings_inventory.md
+/client-auditor verify [path]       # build verification queue, verify Medium+ findings
+/client-auditor verify [path] deep  # verify + depth lenses + adversarial review
+/client-auditor report [path]       # render report.md from existing artifacts
+```
+
+### exploit-investigator
+
+```bash
+/exploit-investigator <tx_hash> <chain>                  # investigate a transaction
+/exploit-investigator <tx_hash> eth "suspected oracle manipulation"   # with hints
+/exploit-investigator briefs/incident.md                   # from a pre-written brief
+/exploit-investigator poc 0x<tx_hash>                      # generate Foundry PoC
+```
+
+## Install
+
+**Claude Code|Codex** :
+
+```
+Install skills in https://github.com/DarkNavySecurity/web3-skills/
+```
+
+Or update an existing install:
+
+```
+Update skills in https://github.com/DarkNavySecurity/web3-skills/
+```
+
+> **Note:** exploit-investigator requires additional setup (Python environment, API keys). See its [README](./exploit-investigator/README.md#setup).
 
 ## Track Record
 
@@ -22,30 +64,7 @@ Web3 security skills kit for [Claude Code](https://docs.anthropic.com/en/docs/cl
 - $1K earned on [Immunefi](https://immunefi.com/profile/DARKNAVY/) (1 Medium finding)
 - Independently discovered a vulnerability in [rippled](https://github.com/XRPLF/rippled) (XRP Ledger), officially acknowledged and patched
 
-**Onchain Exploit Analysis** — 60+ Artifacts in [web3-exploit-analysis](https://github.com/DarkNavySecurity/web3-exploit-analysis), also posted on [![X](https://img.shields.io/badge/Defi_Nerd-000000?logo=x&logoColor=white)](https://x.com/Defi_Nerd_sec)
-
-## Install
-
-Tell Claude Code:
-
-```
-Install skill https://github.com/DarkNavySecurity/web3-skills/
-```
-
-Or clone manually:
-
-```bash
-git clone https://github.com/DarkNavySecurity/web3-skills.git
-bash web3-skills/install.sh
-```
-
-> **Note:** exploit-investigator requires additional setup (Python environment, API keys). See its [README](./exploit-investigator/README.md#setup) for details.
-
-## Update
-
-```
-Update skill https://github.com/DarkNavySecurity/web3-skills/
-```
+**Onchain Exploit Analysis** — 60+ artifacts in [web3-exploit-analysis](https://github.com/DarkNavySecurity/web3-exploit-analysis), also posted on [![X](https://img.shields.io/badge/Defi_Nerd-000000?logo=x&logoColor=white)](https://x.com/Defi_Nerd_sec)
 
 ## License
 

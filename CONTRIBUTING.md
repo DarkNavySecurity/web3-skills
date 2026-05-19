@@ -11,7 +11,7 @@
 ### PR Checklist
 
 - [ ] Follows all rules below
-- [ ] Tested locally with `./install.sh` + Claude Code invocation
+- [ ] Tested locally with Claude Code or Codex invocation
 
 ## What to Contribute
 
@@ -44,7 +44,6 @@
 ## Testing
 
 ```bash
-./install.sh                    # sync to ~/.claude/skills/
 claude                          # start Claude Code
 > /skill-name target-path       # invoke the skill
 ```
