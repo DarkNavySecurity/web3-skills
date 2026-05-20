@@ -4,7 +4,7 @@ Pattern families extracted from historical blockchain client vulnerabilities acr
 
 ---
 
-## P13. Resource Charging Order Violation (Pay-Before-Execute)
+## PAT-13. Resource Charging Order Violation (Pay-Before-Execute)
 
 **Broken invariant**
 Expensive work must not execute before the system proves that the caller has paid for it and host resources are reclaimed.
@@ -42,7 +42,7 @@ CPU, memory, or native resources are consumed asymmetrically, enabling DoS or lo
 
 ---
 
-## P14. Transaction Replay / Frontrunning / Censorship
+## PAT-14. Transaction Replay / Frontrunning / Censorship
 
 **Broken invariant**
 A transaction or event must be bound to the right sender, chain, nonce, and context before it influences scarce resources or state.
@@ -82,7 +82,7 @@ The victim loses inclusion, resources are exhausted, or cross-chain queues remai
 
 ---
 
-## P15. Precision Loss in Financial Calculations
+## PAT-15. Precision Loss in Financial Calculations
 
 **Broken invariant**
 Accounting precision must be sufficient to preserve conservation of value across rounding boundaries.
@@ -119,7 +119,7 @@ Outcomes include locked funds, under-collateralized module accounts, or failed p
 
 ---
 
-## P16. Module/Component Wiring Failures
+## PAT-16. Module/Component Wiring Failures
 
 **Broken invariant**
 Declared features must be fully registered, initialized, and connected to the components that are supposed to use them.

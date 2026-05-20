@@ -54,6 +54,8 @@ Strength signal: no existing defense mechanism is sufficient to fully prevent th
 
 ## Confidence Scoring
 
+The inventory agent computes a confidence score (0-100) for every finding and persists it in the `confidence:` frontmatter field. The score is recomputed on every inventory rerun.
+
 Start at 100 and apply deductions. Multiple deductions stack.
 
 | Condition | Deduction | Rationale |
@@ -93,10 +95,12 @@ Start at 100 and apply deductions. Multiple deductions stack.
 
 ## Severity Classification
 
+Severity is assigned by inventory using the table below, gated by the persisted `confidence` field and the impact ceiling. Trust level (per `routing/trust-boundaries.md`) sharpens the impact assessment but does not replace it — `trust_level: 1` (Internet-reachable) raises the impact ceiling; `trust_level: 6-7` (operator / governance) lowers it via the override rules below.
+
 | Severity | Criteria | Confidence Range |
 |----------|----------|-----------------|
-| **Critical** | Chain halt, chain split, or direct fund loss achievable by any peer/user | ≥80 AND impact is chain-wide or financial |
-| **High** | Node DoS from any peer, significant state corruption, or bypass of core security mechanism | ≥70 |
+| **Critical** | Chain halt, chain split, or direct fund loss achievable by any peer/user (typically `trust_level: 1-2`) | ≥80 AND impact is chain-wide or financial |
+| **High** | Node DoS from any peer, significant state corruption, or bypass of core security mechanism (typically `trust_level: 1-3`) | ≥70 |
 | **Medium** | Requires non-default configuration, or causes degradation without full DoS, or has significant partial mitigations | 40-69 |
 | **Low** | Theoretical with significant practical constraints, or requires unlikely preconditions | 20-39 |
 | **Informational** | Design observation, defense-in-depth suggestion, or by-design behavior that warrants documentation | <20 |

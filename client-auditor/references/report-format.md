@@ -4,7 +4,7 @@ What a strong audit report looks like. The key properties: findings are organize
 
 ---
 
-## Report Structure (example)
+## Report Structure
 
 ```markdown
 # [Project Name] Security Audit Report
@@ -63,18 +63,21 @@ What a strong audit report looks like. The key properties: findings are organize
 
 ---
 
-## Individual Finding (example)
+## Individual Finding
 
 A well-structured finding contains enough detail for someone else to reproduce, verify, and fix it. Here is what that looks like:
 
 ```markdown
-### [ID]: [Short Title]
+### [F-NNN]: [Short Title]
 
 | Field | Value |
 |-------|-------|
-| **Severity** | [Critical / High / Medium / Low / Info] |
+| **Severity** | [Critical / High / Medium / Low / Informational] |
 | **Confidence** | [0-100] |
-| **Pattern** | [P1-P20 ID and name, or "None — heuristic finding"] |
+| **Source Drafts** | [bare draft IDs from `source_candidates` frontmatter, e.g. `p2p-01, xsub-03`] |
+| **Trust Level** | [1-7, see `routing/trust-boundaries.md`] |
+| **Evidence Tag** | [[TRACE] / [BUILD-PASS] / [TEST-PASS] / [FUZZ-PASS] / [DIFF-PASS] / [SPEC-PASS] / [UNVERIFIED]] |
+| **Verification Status** | [confirmed / contested / refuted / not_reproducible / unverified] |
 | **Location** | [file:line_start-line_end] |
 | **Entry Point** | [How an attacker reaches this code] |
 | **Impact** | [What happens if exploited] |
@@ -126,17 +129,7 @@ A well-structured finding contains enough detail for someone else to reproduce, 
 
 ## Finding ID Convention
 
-Format: `[SUBSYSTEM]-[PATTERN_ID]-[SEQUENCE]`
-
-Each agent prefixes finding IDs with its subsystem name (from the manifest) to prevent collisions between parallel agents. The cross-subsystem agent uses `xsub` as its prefix.
-
-- `p2p-P9-01` — First P9 finding from the p2p hunt agent
-- `consensus-P6-01` — First P6 finding from the consensus hunt agent
-- `transactions-P1-03` — Third P1 finding from the transactions hunt agent
-- `rpc-HEURISTIC-01` — First heuristic finding from the rpc hunt agent
-- `xsub-P10-01` — First P10 finding from the cross-subsystem agent
-
-When a finding maps to multiple patterns, use the primary pattern for the ID and note secondary patterns in the body.
+Final report finding IDs are canonical `F-NNN` ids drawn from each finding's `id:` frontmatter field. These are stable across severity changes — the file *name* on disk has a severity prefix (`{C|H|M|L|I}-NNN-{slug}.md`) but the cross-reference id in the report does not. Hunt-time draft IDs (e.g. `p2p-01`, `xsub-03`, `depth-network-surface-02`) are provenance only and appear in the `Source Drafts` field. Do not present raw draft IDs as final finding IDs.
 
 ---
 
@@ -163,15 +156,15 @@ The coverage summary describes work done, not a metric to optimize:
 
 ## Adversarial Review Summary Table
 
-When deep mode is used and findings are reclassified:
+When deep mode is used and inventory incorporates adversarial recommendations:
 
 ```markdown
-| ID | Original Severity | Final Severity | Judge Verdict | Reasoning |
-|----|-------------------|----------------|---------------|-----------|
-| [ID] | HIGH | [new severity] | [TRUE/PARTIAL/FALSE] | [summary] |
+| ID | Inventory Severity | Adversarial Recommendation | Inventory Resolution | Reasoning |
+|----|--------------------|----------------------------|----------------------|-----------|
+| [F-NNN] | [severity] | [recommended severity] | [accepted/rejected/deferred] | [summary] |
 ```
 
-Findings not selected for adversarial review: note as "not adversarially reviewed" with initial severity retained.
+Findings not selected for adversarial review: note as "not adversarially reviewed" with inventory severity retained.
 
 ---
 
@@ -184,4 +177,4 @@ Findings that reference specific code locations and include concrete numbers are
 - **Quantitative math** — Resource findings with concrete calculations (cost × rate × time = impact) are convincing; "could be large" is not
 - **Missing defenses** — Listing what should exist but doesn't gives developers a clear fix target
 - **Fact vs judgment** — Descriptions that state facts and recommendations that state opinions are clearer than mixing both
-- **Pattern IDs** — Using P1-P20 enables cross-referencing across findings and future audits
+- **Source drafts** — Preserve draft IDs as provenance while using `F-NNN` as final report IDs

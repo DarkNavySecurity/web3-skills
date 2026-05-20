@@ -1,171 +1,95 @@
 # Blockchain Client Auditor
 
-A Claude Code skill for security auditing of blockchain node implementations. Covers execution clients, consensus clients, app-chain SDKs, bridges, and any codebase with P2P networking or consensus logic — written in Go, Rust, C/C++, etc.
-
----
+A lightweight Codex/Claude skill for professional security review of blockchain node implementations: execution clients, consensus clients, app-chain SDKs, bridges, relayers, and codebases with P2P networking, consensus logic, RPC handlers, or state transition code. This is a coordination layer for security review, not an autonomous full-audit platform.
 
 ## What it does
 
-The skill runs a **structured 7-stage audit** using an orchestrator + subagent architecture. The main context acts as coordinator and never reads source code or pattern files directly — all deep analysis is delegated to specialized subagents that write findings to disk as they confirm them.
+The orchestrator coordinates agents and runs cheap inline Bash gates; subagents read code and write scoped outputs to `audit/`. Every finding lives in its own markdown file with YAML frontmatter — there is no mega-inventory file as the authority.
 
-**Stages:**
-1. **Setup** — creates output directories, records audit parameters
-2. **Recon** — maps codebase structure, entry points, trust boundaries, and applicable patterns
-3. **Hunt** — parallel subagents analyze assigned subsystems against 20 vulnerability pattern families
-4. **Cross-subsystem** — traces trust boundary mismatches at subsystem call sites
-5. **Validation** — deduplicates findings, applies severity override rules
-6. **Adversarial review** *(deep mode)* — Red Team / Blue Team / Judge protocol for HIGH+ findings
-7. **Report** — consolidated report from disk state
+The pipeline is split into three explicit commands. Each one stops after its own completion gate. Do not silently chain them.
 
-**Knowledge base:**
-- **20 vulnerability pattern families** covering input validation, consensus correctness, resource exhaustion, memory safety, concurrency, serialization, and more
-- **7 code analysis lenses** for systematically reading code at trust boundaries (branch exhaustion, zero-trust message check, data lifetime, resource accounting, etc.)
-- **Heuristic strategies** for finding bugs that patterns alone won't catch
-- **A judgment framework** with 3-lens confidence calibration (anchors, not gates), confidence scoring, and mechanical severity override rules
+1. **`/client-auditor start [path]`** — setup, recon, hunt drafts, optional cross-subsystem pass, inventory promotion to canonical findings, coverage. Stops after the inventory gate passes.
+2. **`/client-auditor verify [path] [deep]`** — builds `verification_queue.md`, verifies queued findings (each verifier edits its assigned finding file in place — frontmatter `verification_*` fields + a `## Verification` body section). `deep` adds at most four depth lenses (consensus / network / state-resource / memory-concurrency) plus an adversarial review pass.
+3. **`/client-auditor report [path]`** — renders `report.md` from existing finding files. Does not run tests, source validation, verifier re-checks, or deep lenses.
 
----
+`start` does **not** accept `deep`. Depth lenses and adversarial review run only during `verify deep`.
 
 ## Design philosophy
 
-- **Orchestrator + worker.** The main context stays lean — it coordinates and validates but never reads source code or pattern files. Subagents do all the deep work. This allows the audit to complete on large codebases (70K+ lines) without context compaction.
-- **Handbook, not pipeline.** Hunt agents receive the full vulnerability handbook and explore freely — patterns, checklists, and heuristics are references to consult, not a sequence to execute. The agent decides what to read, where to dig, and when to stop.
-- **Soft exploration, hard calibration.** Agents use judgment freely when investigating code and assessing candidates. Severity override rules apply mechanically — an agent cannot deviate from them without explicit documented reasoning in the finding file. The exploration layer is unconstrained; the output calibration layer is not.
-- **Findings flow continuously.** Confirmed findings are written to disk as they're verified, not held until the end. The audit is resumable if interrupted.
-- **Honest coverage over false completeness.** "3 confirmed findings in P2P handlers; consensus subsystem not analyzed" beats "comprehensive audit, 100% coverage" that isn't true.
-- **Highest risk first.** Spend time proportional to risk (per the trust boundary model), not proportional to code volume.
-
----
-
-## Install
-
-Follow the [root install instructions](../README.md#install), which installs all skills including this one.
-
----
+- **Per-finding files are authority.** Each canonical finding is `audit/findings/{C|H|M|L|I}-{NNN}-{slug}.md` with YAML frontmatter. The `findings_inventory.md` file is a derived view, regenerated by inventory on every run.
+- **Stable id, mutable filename.** The frontmatter `id: F-NNN` is globally unique, never reused, never renumbered. Severity changes rename the file (`mv` to new `PREFIX-`) but `id` stays — cross-references in queue / report / adversarial all use `F-NNN`.
+- **Drafts → canonical via promotion.** Hunt / cross-subsystem / depth agents write drafts to `findings/_drafts/{focus}-NN-{slug}.md`. Inventory promotes via `mv` with calibrated severity and `id`.
+- **Verification lives on the finding.** Verifier edits its assigned finding file in place (frontmatter `verification_*` fields + a `## Verification` body section).
+- **Append-only audit trail.** Merge → loser becomes `superseded`, file kept. REFUTED → `mv` to `_false-positives/FP-NNN-*.md`, file kept. Nothing is deleted.
+- **Cardinal Rule on gates.** If a Bash gate complains an artifact is "extra" or "no longer required," the gate is wrong — fix the gate, not the artifact. Never delete verifier work to pass a gate.
+- **Main context stays lean.** The orchestrator does not read source files, pattern files, lens files, large analysis references, or finding body text. Subagents do.
+- **Observable phases.** Every phase writes `audit/progress/{phase}-{owner}.md` as its first action and updates at checkpoints. The orchestrator polls these to detect stalls.
+- **Honest uncertainty.** Recon records discovery confidence, miss risk, unresolved entry-point questions, and triggered deep lenses.
+- **Report is cheap.** Report generation is rendering only and discloses stale or inconsistent inputs under `Report Input Gaps` rather than fixing them.
 
 ## Usage
 
-```
-/client-auditor [target-path] [deep]
-```
-
-| Argument | Meaning |
-|----------|---------|
-| `target-path` | Path to audit. Use `.` for the current directory. Required. |
-| `deep` | Enables adversarial review (Red Team / Blue Team / Judge) for high-severity findings. |
-
-**Examples:**
-
-```bash
-# Audit the current repo
-/client-auditor .
-
-# Audit a specific subdirectory
-/client-auditor ./node
-
-# Full deep audit with adversarial review
-/client-auditor . deep
+```text
+/client-auditor start [target-path]
+/client-auditor verify [target-path] [deep]
+/client-auditor report [target-path]
 ```
 
----
+| Command | Meaning |
+|---------|---------|
+| `start` | Discover scope, run hunt agents, write drafts, promote to canonical findings, build coverage. |
+| `verify` | Build verification queue and verify Medium+ findings (and depth promotions if `deep`). `deep` adds 4 lenses + adversarial review. |
+| `report` | Render the final report from existing artifacts only. |
 
-## Knowledge base
-
-### Vulnerability patterns (20 families)
-
-| ID | Name | Applicability |
-|----|------|---------------|
-| P1 | Negative / illegal input triggers unrecoverable panic | All clients |
-| P2 | Error handling defect in batch processing loops | All clients |
-| P3 | EVM compatibility layer impedance mismatch | EVM clients only |
-| P4 | Validator set / staking hook state inconsistency | All clients |
-| P5 | Vote / signature deduplication failures | All clients |
-| P6 | Non-determinism in consensus-path execution | All clients |
-| P7 | RPC handler crash via malformed request | All clients |
-| P8 | Fee grant and fee deduction errors | Complex fee systems only |
-| P9 | P2P resource exhaustion (DoS without rate limit) | All clients |
-| P10 | Bridge / cross-layer message integrity | Bridge clients only |
-| P11 | Unbounded compute in consensus paths | All clients |
-| P12 | ZK circuit under-constraint | ZK clients only |
-| P13 | Charge ordering and gas accounting errors | All clients |
-| P14 | Replay and double-spend | All clients |
-| P15 | Precision loss and rounding manipulation | All clients |
-| P16 | Wiring failures (handler registered to wrong route) | All clients |
-| P17 | Memory safety (C/C++ and unsafe Rust) | C/C++, unsafe Rust only |
-| P18 | Concurrency and data races | Multi-threaded only |
-| P19 | Undefined / implementation-defined behavior | C/C++ only |
-| P20 | Serialization boundary hardening | All clients |
-
-### Analysis techniques
-
-- **Analysis checklist** — 7 code analysis lenses (for reading code): branch exhaustion, zero-trust message check, data lifetime trace, quantitative resource accounting, missing-defense inventory, thread safety, memory safety
-- **Heuristic strategies** — structural suspicion, complexity signals, temporal assumptions, cross-boundary data flow, cross-subsystem interactions, implicit global state
-- **Adversarial review** — Red Team / Blue Team / Judge protocol for stress-testing high-severity findings
-
-### Judgment framework
-
-- **3-lens confidence calibration** — concrete execution path, external reachability, no sufficient existing guard (anchors for calibrating confidence, not pass/fail gates)
-- **Confidence scoring** — start at 100, apply deductions for admin requirements, key compromise prerequisites, quorum thresholds, non-default config, partial mitigations, etc.
-- **Severity classification** — Critical (chain-wide, ≥80), High (≥70), Medium (40-69), Low (20-39), Info (<20)
-- **Severity override rules** — mechanical caps for admin-only, trusted-party key, quorum-required, self-recovering, and unreachable-path findings (calibrated against historical audit experience to prevent severity inflation)
-
----
+If no command is supplied, the skill treats the request as `start` and states that assumption.
 
 ## Output
 
-All output is written to `audit/` in the working directory:
-
-```
+```text
 audit/
-  metadata.md          — audit parameters (target, date, mode)
-  manifest.md          — recon output: subsystem map, entry points, applicable patterns
-  findings/[ID].md     — one file per confirmed finding, written as confirmed
-  progress/[name].md   — subsystem checkpoints (for resume after interruption)
-  report.md            — final consolidated report
+  metadata.md
+  manifest.md
+  spawn_manifest.md
+  progress/                              # per-phase progress, agent-created
+  findings/                              # AUTHORITY for every vulnerability claim
+    _drafts/                             # hunt/xsub/depth output (pre-promotion)
+      {focus}-{NN}-{slug}.md
+    {C|H|M|L|I}-{NNN}-{slug}.md          # canonical findings; PREFIX = current severity
+    _false-positives/
+      FP-{NNN}-{slug}.md                 # REFUTED findings, file kept as audit trail
+  findings_inventory.md                  # auto-generated derived view (not authoritative)
+  verification_queue.md                  # orchestrator-built from frontmatter
+  depth/{lens}.md                        # depth lens scratch output
+  adversarial_review.md                  # severity recommendations table
+  coverage.md
+  report.md
 ```
 
-Run `ls audit/findings/` at any time during the audit to see confirmed findings as they land.
+`audit/progress/` is the live control plane. Required files vary by command phase: `progress/recon.md`, `progress/hunt-{focus}.md`, `progress/xsub.md`, `progress/inventory.md`, `progress/verification_queue.md`, `progress/verify-{ID}.md`, `progress/depth-{lens}.md`, `progress/adversarial.md`, `progress/report.md`.
 
-Each finding includes:
+Agents create their own progress file as their very first Write call — the orchestrator does not pre-create skeletons. Completion gates reject phases whose progress files are not terminal (`complete` | `skipped` | `blocked`).
 
-```
-Severity    — Critical / High / Medium / Low / Informational
-Confidence  — 0–100 score after applying deduction table
-Pattern     — P1–P20 family that matched (or "heuristic finding")
-Location    — file:line_start–line_end
-Entry point — how an attacker reaches this code
-Description — what the code does, what it fails to do, attacker outcome
-Trigger     — step-by-step attack scenario
-Quantitative impact — cost × rate × messages = total; time to impact
-Existing mitigations — every partial defense, with effectiveness
-Missing defenses     — what should be here but isn't
-Recommendation       — concrete fix with code location reference
-Adversarial review   — [deep only] Red/Blue/Judge verdict table
-```
+## Gates
 
-The report opens with an executive summary, includes findings by severity, and closes with an honest coverage summary describing what was and wasn't analyzed.
+Each phase ends with an inline Bash snippet (in `SKILL.md`) that the orchestrator runs to verify required artifacts exist and have valid frontmatter. Snippets are bash, not zsh — invoke via `bash -lc '<snippet>'` on macOS.
 
----
+The most important gate invariants:
+- `spawn_manifest.md` has at least one `Required = YES` row
+- every required hunt has a terminal `progress/hunt-{focus}.md` (zero drafts is OK with `Findings Touched: 0`)
+- every canonical finding has frontmatter `id`, `status`, `severity`, `confidence`, and filename PREFIX equals `severity[0]`
+- every queued verification id has a finding file with `verification_status` set after verify
 
-## Scope
+## Knowledge base
 
-**Works well on:**
-- Execution clients (e.g., go-ethereum, Erigon, Reth, Nethermind, Besu)
-- Consensus clients (e.g., Lighthouse, Prysm, Teku, Nimbus, Lodestar)
-- App-chain SDKs (e.g., Cosmos SDK, Substrate, Tendermint/CometBFT)
-- Custom chains and L2 node implementations
-- Bridge and relayer codebases
-- Any codebase with P2P networking, RPC servers, or consensus logic
-
-**Notes:**
-- For very large codebases, specify a subdirectory to focus the audit
-- Deep mode is slower; budget extra time for adversarial review
-- Cryptographic implementation correctness requires specialist review beyond pattern matching
-
----
+- 20 vulnerability pattern families in `references/patterns/` (PAT-01 through PAT-20)
+- Routing and discovery references in `references/routing/` (entry points, trust boundaries 1-7, pattern routing, discovery playbook)
+- Client-native deep lenses in `references/lenses/` (consensus-invariant, network-surface, state-resource, memory-concurrency)
+- Audit artifact, finding, inventory-view, and progress schemas in `references/specs/`
+- 7-lens analysis checklist, heuristics, severity judging rules, and Red/Blue/Judge adversarial review protocol in `references/`
 
 ## Contributing
 
-- **New vulnerability pattern:** Add to the appropriate `references/patterns/client-attack-patterns-N.md` and update the pattern routing table in `SKILL.md`.
-- **New agent type:** Add `references/agents/{name}-agent.md`, update the relevant stage in `SKILL.md`, and add a resume protocol entry.
-- **Heuristic or checklist improvement:** Edit `references/heuristics.md` or `references/analysis-checklist.md` directly — hunt agents read these as references.
-- **Judgment framework change:** Edit `references/judging.md`. Analytical lens changes are safe; severity override rule changes affect all audits and should be made conservatively.
+- **New pattern**: add to the appropriate `references/patterns/client-attack-patterns-N.md` (use PAT-NN id) and `references/routing/pattern-routing.md`.
+- **New artifact shape**: update `references/specs/finding-format.md` (the schema authority) first, then the matching gate snippet in `SKILL.md` and any agent prompts that consume that shape.
+- **New agent**: add `references/agents/{name}-agent.md` with explicit Inputs / First Action (progress write) / Method / Output / Scope / Self-Check / Return sections, and wire from `SKILL.md` with explicit artifact ownership and a close-after-stage instruction.
+- **New gate**: add it inline in `SKILL.md` at the relevant Stage end. Use `st=` not `status=` (zsh reserved). Pin column indices in inline comments if you parse tables.

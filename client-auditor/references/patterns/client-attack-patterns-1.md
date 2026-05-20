@@ -4,7 +4,7 @@ Pattern families extracted from historical blockchain client vulnerabilities acr
 
 ---
 
-## P1. Negative / Illegal Input Amount Triggers Unrecoverable Panic
+## PAT-01. Negative / Illegal Input Amount Triggers Unrecoverable Panic
 
 **Broken invariant**
 Externally influenced values must be normalized before they reach panic-only constructors or fatal framework return paths.
@@ -42,7 +42,7 @@ Consensus-path variants halt the chain; node-path variants crash the local proce
 
 ---
 
-## P2. Error Handling Defect in Batch Processing Loops
+## PAT-02. Error Handling Defect in Batch Processing Loops
 
 **Broken invariant**
 One malformed item in a batch must not poison processing of all remaining valid items.
@@ -80,7 +80,7 @@ The result ranges from chain halt to silent selection bias, wrong vote tallies, 
 
 ---
 
-## P3. EVM Compatibility Layer Impedance Mismatch
+## PAT-03. EVM Compatibility Layer Impedance Mismatch
 
 **Broken invariant**
 The compatibility layer must preserve the semantic guarantees of the execution environment it claims to emulate.
@@ -119,7 +119,7 @@ Depending on the mismatch, the outcome is fund theft, invariant breakage, or a c
 
 ---
 
-## P4. Validator Set / Staking Hook State Inconsistency
+## PAT-04. Validator Set / Staking Hook State Inconsistency
 
 **Broken invariant**
 Validator-set invariants must hold across the full transition, not just before and after it.

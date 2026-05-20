@@ -4,7 +4,7 @@ Pattern families covering memory safety, concurrency, undefined behavior, and se
 
 ---
 
-## P17. Memory Safety Violations
+## PAT-17. Memory Safety Violations
 
 **Broken invariant**
 Every memory access must target validly allocated, correctly sized, and still-owned memory. No read or write may occur outside allocation bounds, after deallocation, or through an invalidated reference.
@@ -50,7 +50,7 @@ Remote code execution is the ceiling. Heap corruption can be weaponized for arbi
 
 ---
 
-## P18. Concurrency Defects
+## PAT-18. Concurrency Defects
 
 **Broken invariant**
 Shared mutable state must be accessed atomically with respect to all concurrent observers and modifiers. Lock acquisition must follow a consistent total order to prevent deadlock.
@@ -96,7 +96,7 @@ Data races can corrupt consensus state (chain split), lose transactions (fund lo
 
 ---
 
-## P19. Undefined / Platform-Dependent Behavior
+## PAT-19. Undefined / Platform-Dependent Behavior
 
 **Broken invariant**
 Consensus-critical code must produce identical, defined results on every supported platform, compiler, and configuration. No operation may invoke language-level undefined behavior.
@@ -143,7 +143,7 @@ UB can cause compilers to eliminate safety checks (e.g., overflow checks optimiz
 
 ---
 
-## P20. Serialization Boundary Hardening
+## PAT-20. Serialization Boundary Hardening
 
 **Broken invariant**
 Every deserialized message must be structurally valid, bounded in resource consumption, canonically encoded, and round-trip consistent before it influences any node state.

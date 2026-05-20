@@ -11,7 +11,7 @@ Web3 security skills for [Claude Code](https://docs.anthropic.com/en/docs/claude
 | Skill | Invoke | Description |
 |-------|--------|-------------|
 | [**contract-auditor**](./contract-auditor/) | `/contract-auditor [path] [deep]` | Solidity security auditor — DFS-based context mapping, parallel hunt agents, optional adversarial falsifier |
-| [**client-auditor**](./client-auditor/) | `/client-auditor start\|verify\|report [path] [deep]` | Blockchain node auditor (Go, Rust, C/C++) — three explicit phases covering 20+ vulnerability pattern families across P2P, consensus, RPC, and memory safety |
+| [**client-auditor**](./client-auditor/) | `/client-auditor <start\|verify\|report> [path]` | Blockchain node auditor (Go, Rust, C/C++) — 20 vulnerability pattern families across P2P, consensus, RPC, and memory safety; three explicit phases with disk-anchored audit state |
 | [**exploit-investigator**](./exploit-investigator/) | `/exploit-investigator 0x<tx> <chain>` | On-chain exploit investigator — traces attack transactions, reconstructs exploit logic, Analyst-Validator debate loop, optional Foundry PoC ⚠️ [requires Python env + API keys](./exploit-investigator/README.md#setup) |
 
 ### contract-auditor
@@ -24,11 +24,13 @@ Web3 security skills for [Claude Code](https://docs.anthropic.com/en/docs/claude
 
 ### client-auditor
 
+Three explicit phases — do not silently chain. Each phase stops after its own completion gate.
+
 ```bash
-/client-auditor start [path]        # recon, hunt, inventory — stops at findings_inventory.md
-/client-auditor verify [path]       # build verification queue, verify Medium+ findings
-/client-auditor verify [path] deep  # verify + depth lenses + adversarial review
-/client-auditor report [path]       # render report.md from existing artifacts
+/client-auditor start [path]        # recon + hunt drafts + inventory; stops after findings/ is populated
+/client-auditor verify [path]       # verify Medium+ findings in place (frontmatter + ## Verification body)
+/client-auditor verify [path] deep  # also run 4 depth lenses + adversarial review
+/client-auditor report [path]       # render report.md from existing findings; no validation
 ```
 
 ### exploit-investigator

@@ -4,311 +4,490 @@ description: >
   Use when auditing, reviewing, or finding vulnerabilities in a blockchain node,
   execution client, consensus client, or any Go/Rust/C++ codebase with P2P networking,
   consensus logic, RPC handlers, or bridge components.
-allowed-tools: Read, Grep, Glob, Bash, Agent, Write
+allowed-tools: Read, Grep, Glob, Bash, Agent, Write, Edit
 metadata:
-  argument-hint: "[target-path] [deep]"
+  argument-hint: "start [path] | verify [path] [deep] | report [path]"
 ---
 
 # Blockchain Client Auditor
 
-You are the **orchestrator** for a blockchain client security audit. You coordinate specialized subagents that do the deep code reading and pattern matching. Your job is to: understand the target architecture, delegate analysis to subagents, validate their findings, and produce the final report.
+You are the orchestrator for a lightweight but deep blockchain client security audit. Keep the main context small: coordinate agents, run cheap Bash gate snippets, and assemble decisions from disk. Subagents read source code and detailed references.
 
-**Arguments:**
-- `target-path` (required): Path to the codebase or subdirectory to audit. `.` for current directory.
-- `deep` (optional): Apply adversarial review to HIGH+ findings.
+## Commands
 
-**Version check:** Read `~/.claude/skills/client-auditor/VERSION` and fetch `https://raw.githubusercontent.com/DarkNavySecurity/web3-skills/main/client-auditor/VERSION`. If remote version is higher, print: `⚠️ You are not using the latest version. Please upgrade for best security coverage.` Skip silently on fetch failure.
+Use explicit phases. Do not silently continue into the next phase unless the user asks for it.
 
----
+- `/client-auditor start [target-path]`: setup, recon, hunt drafts, optional cross-subsystem pass, inventory promotion to canonical findings, and coverage. Stops after the inventory gate. **Does not accept `deep`** — depth lenses run only during verify (see below).
+- `/client-auditor verify [target-path] [deep]`: build `audit/verification_queue.md` from frontmatter of `audit/findings/`, verify queued findings (each verifier edits the finding file in place), and when `deep` is specified additionally run depth lenses + adversarial review. Stops after the verify gate.
+- `/client-auditor report [target-path]`: formatting only. Read `audit/findings/`, inventory view, queue, coverage, and adversarial review; write `audit/report.md`. Do not run tests, PoCs, benchmarks, harness checks, source validation, inventory reconciliation, verifier re-checks, or deep lenses.
 
-## Context Management Rules
+If no command is supplied, treat it as `start` and state that assumption.
 
-**NEVER read these in the orchestrator (main) context:**
-- `references/patterns/*.md` — all 5 pattern files
-- `references/analysis-checklist.md`
-- `references/heuristics.md`
-- `references/adversarial-review.md`
-- Any source code files from the target codebase (`*.rs`, `*.go`, `*.cpp`, `*.sol`, etc.)
+If the user invokes `/client-auditor start ... deep`, ignore the trailing `deep` token, run `start` normally, and warn: "`deep` has no effect on `start`; run `/client-auditor verify {path} deep` after start finishes to activate depth lenses and adversarial review."
 
-These are read **only by subagents**. The orchestrator's context budget is reserved for coordination.
+Default mode is intentionally light: 1 recon agent, 2-5 hunt agents, and inventory. Verification is a separate command. `deep` on verify adds at most four focused depth lenses plus an adversarial review pass.
 
-**Files the orchestrator MAY read:**
-- `references/agents/*.md` (just-in-time, before spawning each agent type)
-- `audit/manifest.md` (recon output)
-- `audit/progress/*.md` (subsystem checkpoints)
-- `audit/findings/[ID].md` (specific findings as needed for targeted validation or Stage 6 setup)
-- `audit/metadata.md` (audit parameters)
+## Skill Directory Resolution
 
-**Why these rules exist — and the rationalizations to resist:**
+Set `{SKILL_DIR}` to the first existing directory from:
 
-On large codebases, context compaction occurs when the orchestrator reads all pattern files and large source files directly. Pattern files get read because more context feels like better routing. Code files get read to "just verify one function." Both are the failure mode — the content stays in context and accumulates until compaction fires.
+1. `./client-auditor`
+2. `~/.codex/skills/client-auditor`
+3. `~/.claude/skills/client-auditor`
 
-If you find yourself thinking any of the following — stop, that is the failure mode:
-- *"I'll just read this one pattern file to check the routing"* → use the routing table in this prompt
-- *"The recon manifest might be wrong, I'll verify by reading the code"* → spawn a targeted subagent hypothesis
-- *"This file is only 50 lines, reading it won't hurt"* → it stays in context; every file adds up
-- *"Reading analysis-checklist.md will help me write a better agent prompt"* → the hunt agent reads it itself
+Use `{REF_DIR} = {SKILL_DIR}/references`. All paths below are relative to `{REF_DIR}` unless explicitly under `audit/`.
 
----
+Version check: read `{SKILL_DIR}/VERSION`; optionally fetch the remote VERSION and warn if newer. If network fails, continue silently.
 
-## Pattern Routing Table
+## Context Discipline
 
-Use this table to determine which pattern files to assign to each hunt agent. You never need to read these files — you only need to know which ones are relevant.
+The orchestrator must not read source files, `references/patterns/*.md`, `references/lenses/*.md`, `references/analysis-checklist.md`, `references/heuristics.md`, `references/judging.md`, `references/adversarial-review.md`, `references/report-format.md`, individual `audit/findings/{...}.md` body text, or `audit/findings/_drafts/*` body text. Those are subagent inputs.
 
-| ID | Name | Subsystem Affinity | File |
-|----|------|--------------------|------|
-| P1 | Input Panic | All entry points | patterns-1 |
-| P2 | Batch Errors | Block finalization, batch extrinsics | patterns-1 |
-| P3 | EVM Compat | EVM layer, precompiles | patterns-1 |
-| P4 | Validator State | Staking, session, consensus hooks | patterns-1 |
-| P5 | Vote Dedup | Governance, on-chain voting | patterns-2 |
-| P6 | Nondeterminism | Consensus, block production | patterns-2 |
-| P7 | RPC Crash | RPC endpoints | patterns-2 |
-| P8 | Fee Errors | Fee system, gas metering | patterns-2 |
-| P9 | P2P DoS | P2P handlers, mempool | patterns-3 |
-| P10 | Bridge Integrity | Cross-chain, bridge handlers | patterns-3 |
-| P11 | Unbounded Compute | Block finalization, on_initialize | patterns-3 |
-| P12 | ZK Circuits | ZK prover/verifier code | patterns-3 |
-| P13 | Charge Order | VM, host-VM bridge, gas | patterns-4 |
-| P14 | Replay | Mempool, bridge, admission | patterns-4 |
-| P15 | Precision Loss | Rewards, fees, accounting | patterns-4 |
-| P16 | Wiring Failures | Module registry, runtime init | patterns-4 |
-| P17 | Memory Safety | Unsafe Rust, C/C++, FFI | patterns-5 |
-| P18 | Concurrency | Multi-threaded, async shared state | patterns-5 |
-| P19 | Undefined Behavior | C/C++ arithmetic, casts | patterns-5 |
-| P20 | Serialization | All deserialization paths | patterns-5 |
+The orchestrator may read:
+- agent prompt files under `references/agents/`
+- specs under `references/specs/`
+- routing files under `references/routing/` when constructing recon prompts
+- `audit/metadata.md`, `audit/manifest.md`, `audit/spawn_manifest.md`, `audit/findings_inventory.md` (derived view), `audit/verification_queue.md`, `audit/coverage.md`, `audit/adversarial_review.md`, `audit/report.md`
+- only the frontmatter of `audit/findings/*.md` via `awk` / `head` / grep when building the verification queue or running a gate snippet (do not read full bodies)
 
-**Pattern file paths** (for subagent prompts):
-```
-~/.claude/skills/client-auditor/references/patterns/client-attack-patterns-1.md  → P1-P4
-~/.claude/skills/client-auditor/references/patterns/client-attack-patterns-2.md  → P5-P8
-~/.claude/skills/client-auditor/references/patterns/client-attack-patterns-3.md  → P9-P12
-~/.claude/skills/client-auditor/references/patterns/client-attack-patterns-4.md  → P13-P16
-~/.claude/skills/client-auditor/references/patterns/client-attack-patterns-5.md  → P17-P20
+If a specific finding needs targeted review, use `/client-auditor verify` rather than reading source in the orchestrator.
+
+## Artifact Spec
+
+Read `{REF_DIR}/specs/audit-artifacts.md` and `{REF_DIR}/specs/finding-format.md` before starting. The audit state lives in:
+
+```text
+audit/
+  metadata.md
+  manifest.md
+  spawn_manifest.md
+  progress/
+  findings/
+    _drafts/                              # hunt/xsub/depth output
+    {C|H|M|L|I}-{NNN}-{slug}.md           # canonical findings; PREFIX = current severity
+    _false-positives/FP-{NNN}-{slug}.md   # REFUTED
+  findings_inventory.md                   # auto-generated derived view
+  verification_queue.md
+  depth/{lens}.md                         # depth scratch artifact
+  adversarial_review.md
+  coverage.md
+  report.md
 ```
 
-The recon agent filters pattern applicability and records applicable IDs in the manifest. Read applicable IDs from the manifest in Stage 2 — do not re-evaluate applicability here.
+Each finding is one file in `findings/`; verification fields live in that finding's frontmatter and a `## Verification` body section. `findings_inventory.md` is a derived view, not authority — see `specs/finding-format.md`.
 
----
+## Observability
 
-## Understanding the Target
+Every phase has a progress artifact under `audit/progress/` following `specs/progress-format.md`. **Agents create their own progress file as the very first action** — the orchestrator does **not** pre-create skeletons. If an agent has not written its progress file, it has not started.
 
-### Trust Boundary Model
+Required progress files per phase:
 
-Prioritize analysis by trust level — lower trust level number = more dangerous, higher priority. This is a default reference ordering; hunt agents may adjust per-project based on recon findings.
+- `progress/recon.md`
+- `progress/hunt-{focus}.md` for every required hunt row, or the exact `Progress Output` in `spawn_manifest.md`
+- `progress/xsub.md` during `start`, with `Status: skipped` if no cross-subsystem pass runs
+- `progress/inventory.md`
+- `progress/verification_queue.md` during `/client-auditor verify`
+- `progress/verify-{ID}.md` for every queued finding
+- `progress/depth-{lens}.md` for every triggered deep lens
+- `progress/adversarial.md` when adversarial review runs or is intentionally skipped in deep mode
+- `progress/report.md` during `/client-auditor report`
 
-1. **Unauthenticated P2P messages** — Any node on the network. No handshake, no stake. Highest risk.
-2. **Cross-chain messages** — External chain or bridge as origin. Trust depends on systems you cannot control or audit.
-3. **Authenticated peer messages** — Completed handshake, any peer. Low barrier to become a peer.
-4. **Transaction processing** — Signed by user, fee-gated. Large attacker population but economically constrained.
-5. **Consensus protocol messages** — Validator-only, stake-gated. Small attacker set, high impact when exploited.
-6. **RPC endpoints** — Node operators/users. Deployment-dependent exposure; elevate if publicly reachable.
-7. **Governance/admin** — Root or governance origin. Smallest attacker population, highest barrier to exploit.
+For phases that are intentionally skipped (e.g. cross-subsystem when no scoped hypotheses exist), the orchestrator writes the progress file directly with `Status: skipped` and a `Blockers:` reason. No agent needed.
 
-### Entry Point Signatures by Framework
+To detect a stalled agent, the orchestrator polls `audit/progress/` via `ls`, `find -newer`, or by reading `Last Updated:` fields. If an agent has not updated progress in N minutes, the orchestrator may checkpoint it with a narrow request (update progress, write any partial artifacts, record blockers, stop or continue within its assigned phase) or terminate and re-spawn.
 
-| Concept | Substrate/Rust | Cosmos Go | EL Go | Rust (other) |
-|---------|---------------|-----------|-------|-------------|
-| Block finalization | `on_finalize`, `execute_block` | `EndBlock`, `FinalizeBlock` | `Finalize`, `Seal` | `process_slot` |
-| Tx dispatch | `apply_extrinsic`, `#[pallet::call]` | `DeliverTx`, `CheckTx` | `ApplyTransaction` | `process_transaction` |
-| Consensus hooks | `on_initialize`, `on_idle` | `PrepareProposal`, `ProcessProposal` | `VerifyHeader` | `handle_vote` |
-| P2P handlers | `handle_protocol_message` | `Receive`, `OnReceive` | `Handle`, `handleMsg` | `handle_gossip` |
-| RPC endpoints | `rpc_methods`, `#[rpc]` | `RegisterRoutes`, `NewQuerier` | `RegisterApis` | `register_rpc` |
-| Cross-chain | `xcm_execute`, `transact` | `OnRecvPacket` | — | — |
+## Workspace Sidecar Files
 
----
+When the project lives on a non-APFS filesystem (e.g. ExFAT external drive), macOS creates `._*` AppleDouble sidecar files next to every file written under `audit/`. These are benign metadata.
 
-## Subagent Prompt Construction
+- **Do not pause the audit** when `._*` files appear; do not delete them; do not treat them as unexpected workspace mutations.
+- All Bash gate snippets either use literal prefix patterns (e.g. `findings/[CHMLI]-*.md`, `_drafts/${focus}-*.md`) that naturally skip `._*`, or pass `! -name '._*'` to `find` when the glob would otherwise match them.
+- Agents that `ls` or glob a directory must apply the same exclusion (`find ... ! -name '._*'` or `grep -v '/\._'`).
 
-Every agent prompt must include:
-- Full text of the agent's instruction file (read just before spawning), if the stage uses one
-- `skill_dir: ~/.claude/skills/client-auditor/references/`
-- `audit_dir: audit/`
+## Agent Lifecycle
 
-Per-agent fields (entry points, pattern files, hypotheses, etc.) are specified in each stage of the Orchestration Flow below.
+Codex Agent Teams enforces a concurrent-thread cap (typically 5-6). At the end of each Stage, after the stage gate passes, the orchestrator must call `close_agent` on every completed worker spawned in that stage before spawning workers for the next Stage. Otherwise the next `spawn_agent` will fail with `agent thread limit reached` and require bulk-closing mid-pipeline.
 
----
+Specifically:
+- After **Stage 3 (Hunt)**: close all hunt workers once their drafts and progress files pass the hunt gate.
+- After **Stage 4 (Cross-subsystem)**: close the xsub worker.
+- After **Stage 5 (Inventory)**: close the inventory worker.
+- After **Stage 7 (Verification)**: close all verifier workers in batches; do not let completed verifier slots block Stage 8 spawns.
+- After **Stage 8 (Depth)**: close all depth workers, then re-spawn the inventory worker for the re-inventory step, then close it.
+- After **Stage 9 (Adversarial)**: close the adversarial worker.
 
-## Orchestration Flow
+Worker state is on disk; closing a worker does not lose work.
+
+## Gates — Cardinal Rule
+
+When a gate snippet reports an inconsistency, the orchestrator must **never delete, move, or rewrite an already-written verifier section, finding file, or progress file just to make the gate pass**. If a gate complains that an artifact is "extra" or "no longer required," the gate definition is wrong — fix the gate, not the artifact.
+
+## Schema Discipline
+
+The audit state is markdown frontmatter + body sections grepped by Bash gates. This is intentional — every artifact is human-inspectable and machine-parseable with `awk` / `grep` / `find`. But text protocols are fragile: a stray `|`, an upper/lower case typo, an unfilterd `._*` sidecar, or a column rename can break gates silently.
+
+Every agent and gate snippet treats `specs/finding-format.md` as the schema authority:
+
+- **Frontmatter values that flow into markdown tables MUST NOT contain `|`.** Agents replace `|` with `/` before write; gates that build tables `tr '|' '/'` on field substitution.
+- **Enum values are case-sensitive.** `severity: High` (title-case) and `verification_status: confirmed` (lowercase) are the only valid spellings.
+- **Glob patterns that may match macOS sidecars MUST filter** (`find ... ! -name '._*'` or use a character-class prefix that excludes a leading dot).
+- **`spawn_manifest.md` / `verification_queue.md` column orders are part of the contract.** Inline comments in the gate snippets pin the column indices.
+- **Filename PREFIX MUST match the `severity` field's first letter** for canonical findings. Inventory enforces this; the inventory gate re-verifies it.
+
+If a future change adds a column to any tabular artifact, update the matching gate snippet's column index AND its inline comment in the same edit.
+
+## Shell Binding
+
+All gate snippets in this file are **bash**, not POSIX `sh` and not `zsh`. The orchestrator must run each snippet under bash explicitly. On macOS where the default user shell is zsh, that means:
+
+```bash
+bash -lc '<snippet>'
+```
+
+or save the snippet to a temp file and `bash /tmp/gate.sh`. Do not paste snippets into a zsh prompt directly — zsh has reserved variables (`status`, `path`, `cdpath`, etc.) that collide with common script variables, and its `[[ ]]` test is not exactly the same as bash's.
+
+Gate snippets in this file avoid named variables that collide with zsh built-ins (e.g. `status` is renamed `st`), but the safest convention is still to invoke them via `bash -lc`.
+
+## Start Phase
+
+Run for `/client-auditor start [target-path]`.
 
 ### Stage 1 — Setup
 
+Create directories:
+
 ```bash
-mkdir -p audit/findings audit/progress
+mkdir -p audit/progress audit/findings/_drafts audit/findings/_false-positives audit/depth
 ```
 
-Write `audit/metadata.md`:
-```markdown
-# Audit Metadata
-Target: {target-path}
-Date: {today}
-Mode: {normal | deep}
-Skill version: {VERSION content}
+Write `audit/metadata.md` with target, date, mode, skill version, resolved `{SKILL_DIR}`, and any user-provided impact calibration.
+
+### Stage 2 — Recon Manifest and Spawn Manifest
+
+Read:
+
+- `agents/recon-agent.md`
+- `specs/progress-format.md`
+- `routing/entry-points.md`
+- `routing/trust-boundaries.md`
+- `routing/pattern-routing.md`
+- `routing/discovery-playbook.md`
+
+Spawn one recon agent with those texts plus `target_path`, `audit_dir`, and `{REF_DIR}`. Recon writes `audit/manifest.md`, `audit/spawn_manifest.md`, and `audit/progress/recon.md`. Recon's `spawn_manifest.md` uses an `Expected Output Prefix` column pointing under `findings/_drafts/`.
+
+After it returns, read only `audit/manifest.md` and `audit/spawn_manifest.md`. If no subsystem groups or required spawn rows exist, halt with a clear scope/path error.
+
+Recon gate:
+
+```bash
+# spawn_manifest columns: | Agent ID | Focus | Trust Level | Entry Points |
+# Pattern Files | Expected Output Prefix | Progress Output | Required | Status |
+# So Required = YES appears as `| YES | <STATUS> |` near end-of-line.
+test -f audit/manifest.md && test -f audit/spawn_manifest.md \
+  && grep -qE '\| YES \| [A-Z_]+ \|[[:space:]]*$' audit/spawn_manifest.md \
+  && awk -F': *' '/^- Status:/ {s=$2} END {exit (s ~ /^(complete|skipped|blocked)$/) ? 0 : 1}' audit/progress/recon.md \
+  || { echo "FAIL: recon gate"; exit 1; }
+echo "recon gate: OK"
 ```
 
-### Stage 2 — Reconnaissance
+### Stage 3 — Hunt Drafts
 
-Read `~/.claude/skills/client-auditor/references/agents/recon-agent.md`.
+Read `agents/hunt-agent.md`, `specs/finding-format.md`, `specs/progress-format.md`.
 
-Spawn a recon subagent (Agent tool) with a prompt that includes:
-- The full text of `recon-agent.md`
-- `target_path: {target-path}`
-- `audit_dir: audit/`
-- The entry point signatures table from this prompt (copy it in)
-- `skill_dir: ~/.claude/skills/client-auditor/references/`
+For each `Required = YES` row in `audit/spawn_manifest.md`, spawn one hunt agent with:
 
-Wait for the subagent to return, then read `audit/manifest.md`.
+- exact `Focus`, `Trust Level`, `Entry Points`, `Pattern Files` from the row
+- `expected_output_prefix` = `findings/_drafts/{focus}-` (from `Expected Output Prefix` column)
+- `progress_output` = exact `Progress Output` from the row (or `progress/hunt-{focus}.md` if missing)
+- `{REF_DIR}` and `audit_dir`
 
-Extract and hold in context (small structured values only):
-- List of subsystem groups with trust levels
-- Applicable pattern IDs
-- Recommended agent allocation
-- Cross-subsystem interaction list
+Prefer 2-5 total hunt agents. If recon recommends more, batch by priority; tell extra rows to merge by adjacent trust boundary or subsystem in `manifest.md`. Hunt agents write to `findings/_drafts/{focus}-NN-{slug}.md` (one file per draft, no aggregate index) and update their own progress.
 
-If the manifest contains no subsystem groups, halt immediately: `Audit halted: recon found no entry points in {target-path}. Verify the path is correct and the codebase uses a supported framework (Substrate, Cosmos SDK, geth-fork, or C/C++ node).`
+Hunt gate:
 
-### Stage 3 — Delegated Hunting
+```bash
+# Extract Focus (column 2 of data = awk $3) for every row where Required (column 8 = awk $9) == YES.
+# Trim whitespace on each field so " YES " matches "YES" and Focus comes out clean.
+fail=0
+for focus in $(awk -F'|' '
+  { for (i = 1; i <= NF; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i) }
+  $9 == "YES" && $3 != "" && $3 != "Focus" { print $3 }
+' audit/spawn_manifest.md); do
+  drafts=$(ls audit/findings/_drafts/${focus}-*.md 2>/dev/null | wc -l | tr -d ' ')
+  prog=audit/progress/hunt-${focus}.md
+  if [ ! -f "$prog" ]; then echo "FAIL hunt $focus: missing $prog"; fail=1; continue; fi
+  st=$(awk -F': *' '/^- Status:/ {print $2; exit}' "$prog")
+  case "$st" in
+    complete|blocked|skipped) ;;
+    *) echo "FAIL hunt $focus: progress not terminal ($st)"; fail=1 ;;
+  esac
+  echo "[hunt $focus] drafts=$drafts status=$st"
+done
+[ $fail -eq 0 ] && echo "hunt gate: OK" || exit 1
+```
 
-Read `~/.claude/skills/client-auditor/references/agents/hunt-agent.md`.
+If a hunt failed terminally, the orchestrator may re-spawn just that focus (do not touch other agents' progress or drafts).
 
-For each subsystem group from the manifest (lowest trust level number first — trust level 1 = unauthenticated P2P = highest priority):
+After the hunt gate passes, **`close_agent` every hunt worker spawned in this Stage** before proceeding to Stage 4. Their progress / draft files are on disk; closing them does not lose work but frees Codex Agent Teams thread slots.
 
-Spawn a hunt subagent with a prompt that includes:
-- The full text of `hunt-agent.md`
-- `subsystem: {group name}`
-- `trust_level: {level from manifest}`
-- `entry_points:` [list of file:line:function from the manifest for this subsystem]
-- `pattern_files:` [pattern file paths assigned to this subsystem group in the manifest]
-- `skill_dir: ~/.claude/skills/client-auditor/references/`
-- `audit_dir: audit/`
+### Stage 4 — Cross-Subsystem Drafts
 
-**You may spawn multiple hunt agents in parallel** if subsystems are independent (no shared entry points). Independent = different files, different trust boundaries, no cross-subsystem calls between them per the manifest.
+If `manifest.md` or progress files list cross-boundary hypotheses, spawn `agents/cross-subsystem-agent.md` with scoped hypotheses and `audit_dir`. The agent writes only `findings/_drafts/xsub-*.md` and `progress/xsub.md`.
 
-After each agent returns, record its summary. Do not read raw code or full agent outputs — read only the structured summary it returns. If a finding sounds suspicious, read that specific `audit/findings/[ID].md` to validate it.
+If skipped, the orchestrator writes the progress marker directly:
 
-List `audit/progress/`. For each subsystem group in `audit/manifest.md`, check whether a corresponding progress file exists with `status: complete`. If any group has no progress file or is not marked complete, log a warning: `WARNING: Subsystem {name} has no completion record — coverage gap.` Carry these warnings into the Coverage Summary of the final report.
+```bash
+cat > audit/progress/xsub.md <<EOF
+# Progress: cross-subsystem/xsub
 
-### Stage 4 — Cross-Subsystem Analysis
+- Phase: cross-subsystem
+- Owner: orchestrator
+- Status: skipped
+- Started At: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Last Updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Assigned Output: progress/xsub.md
+- Current Step: phase skipped by orchestrator
+- Files Read: none
+- Files Written: this progress marker
+- Decisions Made: no scoped cross-subsystem hypotheses
+- Findings Touched: 0
+- Impact / Severity Notes: n/a
+- Blockers: no cross-subsystem hypotheses identified
+- Next Checkpoint: inventory consumes this skipped marker
+EOF
+```
 
-Read each `audit/progress/*.md` file. Collect any cross-subsystem call observations noted by hunt agents. Merge these with the cross-subsystem interaction list from `audit/manifest.md` to form a combined hypothesis list.
+After Stage 4, **`close_agent` the xsub worker** if one was spawned.
 
-If the combined hypothesis list is non-empty:
+### Stage 5 — Inventory and Coverage
 
-Read `~/.claude/skills/client-auditor/references/agents/cross-subsystem-agent.md`.
+Read `agents/inventory-agent.md`, `specs/finding-format.md`, `specs/inventory-format.md`, `specs/progress-format.md`.
 
-Spawn a cross-subsystem agent with:
-- Full text of `cross-subsystem-agent.md`
-- `audit_dir: audit/`
-- `hypotheses:` [the combined hypothesis list]
-- `skill_dir: ~/.claude/skills/client-auditor/references/`
+Spawn the inventory agent with `audit_dir` and `{REF_DIR}`. It writes:
 
-Record the structured summary it returns.
+- `audit/findings/{C,H,M,L,I}-{NNN}-{slug}.md` (promoted from drafts)
+- `audit/findings/_false-positives/FP-{NNN}-{slug}.md` (only on inventory re-runs that move a verifier-REFUTED finding here; first-run start phase produces none)
+- `audit/findings_inventory.md` (derived view; auto-generated)
+- `audit/coverage.md`
+- `audit/progress/inventory.md`
 
-### Stage 5 — Dedup and Severity Validation
+Inventory gate:
 
-List `audit/findings/`. If empty, skip to Stage 7.
+```bash
+test -f audit/findings_inventory.md && test -f audit/coverage.md \
+  || { echo "FAIL: inventory outputs missing"; exit 1; }
+# every draft must have been promoted or superseded (exclude macOS ._* sidecars)
+leftover=$(find audit/findings/_drafts -maxdepth 1 -type f -name '*.md' ! -name '._*' 2>/dev/null | wc -l | tr -d ' ')
+if [ "$leftover" != "0" ]; then echo "FAIL: $leftover drafts unprocessed in _drafts/"; exit 1; fi
+# every canonical finding must have valid frontmatter AND filename PREFIX matches severity
+bad=0
+for f in audit/findings/[CHMLI]-*.md; do
+  [ -f "$f" ] || continue
+  for field in 'id:' 'status:' 'severity:' 'confidence:'; do
+    grep -q "^${field}" "$f" || { echo "MISSING $field in $f"; bad=1; }
+  done
+  prefix=$(basename "$f" | cut -c1)
+  sev_letter=$(awk -F': *' '/^severity:/ {print toupper(substr($2,1,1)); exit}' "$f")
+  [ "$prefix" = "$sev_letter" ] || { echo "MISMATCH $f: filename prefix=$prefix vs severity[0]=$sev_letter"; bad=1; }
+done
+[ $bad -eq 0 ] && echo "inventory gate: OK" || exit 1
+```
 
-Read `~/.claude/skills/client-auditor/references/agents/dedup-agent.md`.
+If inventory is missing or malformed, re-run the inventory agent. Stop here and summarize draft counts, reportable findings, coverage gaps, and what `/client-auditor verify` will need.
 
-Spawn a dedup subagent with a prompt that includes:
-- The full text of `dedup-agent.md`
-- `finding_files:` [all `audit/findings/*.md`]
-- `skill_dir: ~/.claude/skills/client-auditor/references/`
-- `audit_dir: audit/`
+After the inventory gate passes, **`close_agent` the inventory worker**.
 
-Record the structured summary it returns. Do not read raw finding files in the orchestrator.
+## Verify Phase
 
-### Stage 6 — Adversarial Review (DEEP mode only)
+Run for `/client-auditor verify [target-path] [deep]`.
 
-Read `~/.claude/skills/client-auditor/references/agents/adversarial-agent.md`.
+### Stage 6 — Verification Queue
 
-For each HIGH or CRITICAL finding listed in the Stage 5 summary, read that specific `audit/findings/{ID}.md` to extract `code_files`, then spawn an adversarial review agent with:
-- Full text of `adversarial-agent.md`
-- `finding_path: audit/findings/{ID}.md`
-- `code_files:` [file paths extracted from the finding's Location and Trigger Scenario fields]
-- `skill_dir: ~/.claude/skills/client-auditor/references/`
-- `audit_dir: audit/`
+The orchestrator builds `audit/verification_queue.md` from the frontmatter of `audit/findings/{C,H,M,L,I}-*.md`. Verifier agents must not edit this file.
 
-After each agent returns, record its summary.
+Build the queue with a Bash snippet:
 
-### Stage 7 — Report Assembly
+```bash
+mkdir -p audit
+{
+  echo "# Verification Queue"
+  echo
+  echo "| ID | Severity | Required | Reason |"
+  echo "|----|----------|----------|--------|"
+  for f in audit/findings/[CHMLI]-*.md; do
+    [ -f "$f" ] || continue
+    id=$(awk -F': *' '/^id:/ {print $2; exit}' "$f")
+    sev=$(awk -F': *' '/^severity:/ {print $2; exit}' "$f")
+    req=$(awk -F': *' '/^verification_required:/ {print $2; exit}' "$f")
+    # sanitize: strip `|` from reason so the markdown row stays parseable
+    reason=$(awk -F': *' '/^verification_reason:/ {print $2; exit}' "$f" | tr '|' '/')
+    st=$(awk -F': *' '/^verification_status:/ {print $2; exit}' "$f")
+    if [ "$req" = "true" ] && [ "$st" != "confirmed" ] && [ "$st" != "contested" ] && [ "$st" != "refuted" ] && [ "$st" != "not_reproducible" ]; then
+      echo "| $id | $sev | true | needs verification |"
+    else
+      echo "| $id | $sev | false | ${reason:-already-verified-or-not-required} |"
+    fi
+  done
+} > audit/verification_queue.md
+```
 
-If Stage 5 was skipped (no findings), write a brief `audit/report.md` noting zero findings. Read `audit/progress/*.md` for the coverage summary and include any carried-forward `WARNING:` messages. Halt here.
+Then write the orchestrator's progress file:
 
-Read `~/.claude/skills/client-auditor/references/agents/report-agent.md`.
+```bash
+cat > audit/progress/verification_queue.md <<EOF
+# Progress: verification/queue
 
-Spawn a report subagent with a prompt that includes:
-- The full text of `report-agent.md`
-- `audit_dir: audit/`
-- `skill_dir: ~/.claude/skills/client-auditor/references/`
-- `dedup_summary:` [the Stage 5 dedup summary]
-- `adversarial_summaries:` [Stage 6 adversarial review verdicts, or empty if Stage 6 was skipped]
-- `warnings:` [coverage gap warnings from Stage 3, or empty if none]
+- Phase: verification
+- Owner: orchestrator
+- Status: complete
+- Started At: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Last Updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Assigned Output: verification_queue.md
+- Current Step: queue built from findings frontmatter
+- Files Read: audit/findings/[CHMLI]-*.md
+- Files Written: audit/verification_queue.md
+- Decisions Made: queued findings with verification_required=true and not already verified
+- Findings Touched: $(grep -c '^| F-' audit/verification_queue.md)
+- Impact / Severity Notes: n/a
+- Blockers: none
+- Next Checkpoint: per-finding verifier spawns
+EOF
+```
 
-Wait for the subagent to return, then verify `audit/report.md` was written.
+If no rows match (empty queue beyond the table header), skip the verifier phase.
 
----
+### Stage 7 — Per-Finding Verification
+
+Read `agents/verifier-agent.md`, `specs/finding-format.md`, `specs/progress-format.md`.
+
+For each queued ID (where `Required = true` in `verification_queue.md`):
+
+1. Look up the finding file: `f=$(ls audit/findings/[CHMLI]-${NNN}-*.md 2>/dev/null | head -1)`
+2. Spawn verifier with `finding_id`, `finding_path: ${f}`, `audit_dir`, `{REF_DIR}`
+
+Verifier edits the finding file in place: updates `verification_*` frontmatter fields and appends a `## Verification` section. Verifier writes `progress/verify-{ID}.md`. Verifier does **not** write `verification_queue.md`, `findings_inventory.md`, or any other finding.
+
+Verify gate:
+
+```bash
+# Extract F-NNN ids from rows where Required column == "true".
+# Use plain command substitution (no process substitution `< <()` so we keep
+# $fail mutations in the parent shell — Required cell is column 3 = awk $4).
+required_ids=$(awk -F'|' '
+  { for (i = 1; i <= NF; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i) }
+  $4 == "true" && $2 ~ /^F-[0-9]+$/ { print $2 }
+' audit/verification_queue.md)
+fail=0
+for id in $required_ids; do
+  num=$(echo "$id" | sed 's/^F-//')
+  f=$(ls audit/findings/[CHMLI]-${num}-*.md 2>/dev/null | head -1)
+  if [ -z "$f" ]; then echo "FAIL $id: no matching finding file"; fail=1; continue; fi
+  st=$(awk -F': *' '/^verification_status:/ {print $2; exit}' "$f")
+  case "$st" in
+    confirmed|contested|refuted|not_reproducible) ;;
+    *) echo "FAIL $id: verification_status=${st:-<missing>} in $f"; fail=1 ;;
+  esac
+done
+[ $fail -eq 0 ] && echo "verify gate: OK" || exit 1
+```
+
+If the gate fails, re-spawn the missing verifier(s). **Never delete verifier-written frontmatter or `## Verification` sections** to make the gate pass.
+
+After the verify gate passes, **`close_agent` every verifier worker spawned in this Stage** before proceeding to Stage 8 (deep) or terminating the verify command.
+
+### Stage 8 — Deep Mode Lenses
+
+Skip unless `deep` is specified. Read `agents/depth-agent.md`. Note: the orchestrator does NOT read the lens files themselves — depth agents read their assigned `references/lenses/{lens}.md`.
+
+Trigger at most four lenses from `manifest.md` Deep Lens Triggers table (only those marked `YES`):
+
+- `consensus-invariant`
+- `network-surface`
+- `state-resource`
+- `memory-concurrency`
+
+Execute in order:
+
+**8.1 Spawn depth agents.** For each triggered lens, spawn one depth agent with `lens`, `audit_dir`, `{REF_DIR}`. Each agent writes `audit/depth/{lens}.md` plus promotion drafts at `audit/findings/_drafts/depth-{lens}-NN-{slug}.md` and `audit/progress/depth-{lens}.md`.
+
+**8.2 Wait + close.** `wait_agent` for all depth workers. When complete, `close_agent` each one (frees Codex thread slots before the inventory re-spawn).
+
+**8.3 Re-run inventory.** Spawn the inventory agent again with `audit_dir` and `{REF_DIR}`. It promotes the new depth drafts (assigning new `F-NNN` from the existing ID pool, preserving every prior `F-NNN`), may move verifier-REFUTED findings to `_false-positives/`, may rename files via `mv` if severity changed. Wait, then `close_agent` the inventory worker.
+
+**8.4 Re-run inventory gate** (same Bash snippet as Stage 5 inventory gate).
+
+**8.5 Rebuild `verification_queue.md`** (same Bash snippet as Stage 6 — it reads the now-updated finding frontmatter).
+
+**8.6 Spawn verifiers for newly queued IDs.** Read the updated queue; for each row with `Required = true` that does NOT already have `verification_status` set in its finding, spawn a verifier per Stage 7. Wait + close.
+
+**8.7 Re-run verify gate** (same Bash snippet as Stage 7).
+
+### Stage 9 — Adversarial Review (deep only)
+
+Read `agents/adversarial-agent.md`. Select `finding_ids` whose frontmatter satisfies any of:
+
+- `severity` ∈ {Critical, High}, OR
+- `severity: Medium` AND `confidence >= 70`, OR
+- `verification_evidence_tag: [UNVERIFIED]` regardless of severity.
+
+(Use the same Bash frontmatter parsing pattern as the verify queue builder.)
+
+Spawn the adversarial agent with the chosen `finding_ids`. It writes only `audit/adversarial_review.md` and `audit/progress/adversarial.md` — it never edits findings. If it recommends severity changes, the orchestrator re-runs inventory once more; inventory reads `adversarial_review.md` and applies accepted recommendations (`mv` + frontmatter + `severity_history`) per its Step 5 adversarial parsing rule.
+
+If no adversarial review is needed, the orchestrator writes the skipped marker:
+
+```bash
+cat > audit/progress/adversarial.md <<EOF
+# Progress: adversarial/adversarial
+
+- Phase: adversarial
+- Owner: orchestrator
+- Status: skipped
+- Started At: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Last Updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Assigned Output: progress/adversarial.md
+- Current Step: phase skipped by orchestrator
+- Files Read: none
+- Files Written: this progress marker
+- Decisions Made: no findings met the adversarial review threshold
+- Findings Touched: 0
+- Impact / Severity Notes: n/a
+- Blockers: no qualifying findings
+- Next Checkpoint: report
+EOF
+```
+
+After Stage 9, **`close_agent` the adversarial worker** (and any lingering inventory worker from Step 8.3 re-inventory or post-adversarial re-inventory). At this point every worker spawned during the verify command should be closed.
+
+Stop here. Summarize verifier verdicts, tests attempted, blockers, and any report input gaps.
+
+## Report Phase
+
+Run for `/client-auditor report [target-path]`.
+
+Read `agents/report-agent.md`, `references/report-format.md`, and `specs/progress-format.md`. Spawn the report agent with `audit_dir` and `{REF_DIR}`.
+
+Report stage is formatting only. Do not run tests, PoCs, benchmarks, harness checks, source validation, inventory reconciliation, verifier re-checks, or deep lenses. If report inputs appear stale or inconsistent, the report agent discloses the inconsistency in `audit/report.md` under `Report Input Gaps`.
+
+After the report gate passes, **`close_agent` the report worker**.
+
+Report gate:
+
+```bash
+test -f audit/report.md && [ "$(wc -c < audit/report.md)" -gt 200 ] \
+  && test -f audit/progress/report.md \
+  && awk -F': *' '/^- Status:/ {print $2; exit}' audit/progress/report.md | grep -q '^complete$' \
+  || { echo "FAIL: report gate"; exit 1; }
+echo "report gate: OK"
+```
 
 ## Resume Protocol
 
-If context has been compacted and you have lost earlier conversation state, recover from disk:
+Recover state from disk in this order: `metadata.md`, `progress/`, `manifest.md`, `spawn_manifest.md`, `findings/[CHMLI]-*.md`, `findings/_false-positives/`, `verification_queue.md`, `coverage.md`, `report.md`. The per-finding files in `findings/[CHMLI]-*.md` are the authoritative source; `findings_inventory.md` is auto-generated and can be re-derived. If `findings/_drafts/` contains files on resume, run the inventory phase to flush them (drafts in a healthy state should be empty after start completes). Resume only within the requested command phase. Do not auto-advance from start to verify or from verify to report.
 
-1. Read `audit/metadata.md` — recover audit parameters (target, mode, date)
-2. Read `audit/manifest.md` — recover subsystem map and agent allocation
-3. List `audit/progress/` — determine which subsystems are complete
-4. List `audit/findings/` — see confirmed findings so far
-5. If `audit/report.md` exists → audit finished.
-6. Re-read the agent prompt file for the stage you are resuming into before spawning any agents:
-   - Resuming Stage 3 → re-read `references/agents/hunt-agent.md`
-   - Resuming Stage 4 → re-read `references/agents/cross-subsystem-agent.md`
-   - Resuming Stage 5 → re-read `references/agents/dedup-agent.md`
-   - Resuming Stage 6 → re-read `references/agents/adversarial-agent.md`
-   - Resuming Stage 7 → re-read `references/agents/report-agent.md`
-7. Resume from the first incomplete stage. Stage 5 (dedup) is safe to re-run — it is idempotent.
+## Completion Criteria
 
-All state needed to continue is on disk. Do not re-read code or pattern files — delegate to subagents as before.
+- `start` is complete when the recon, hunt, xsub, and inventory gates all pass and `findings/_drafts/` is empty.
+- `verify` is complete when the verify gate passes (every `Required = true` queue row has a finding file with `verification_status` set). In deep mode, also depth lens artifacts exist for every triggered lens and `progress/adversarial.md` exists.
+- `report` is complete when the report gate passes.
 
----
-
-## Operating Principles
-
-**Highest risk first.** Unauthenticated P2P and cross-chain handlers (trust level 1-2) carry the most risk. Spend analysis budget inversely proportional to trust level number — level 1 deserves the most budget, not code volume.
-
-**Honest coverage over false completeness.** Report what was analyzed and what wasn't. Coverage is a description of work done, not a metric to optimize.
-
-**Targeted delegation.** Each hunt agent receives a subsystem territory with specific entry points and relevant patterns. The orchestrator does not re-analyze what it delegates — it trusts the manifest's entry points and the hunt agent's judgment within that scope.
-
-**Findings live on disk.** Every confirmed finding is written to `audit/findings/[ID].md` by the hunt agent that found it. The orchestrator reads specific findings from disk when needed — never reconstructs them from memory.
-
-**Cross-reference patterns.** If a finding touches multiple pattern families, note all applicable IDs. If two findings share a root cause, note the dependency.
-
----
-
-## Deep Mode
-
-When `deep` is specified, Stage 6 (adversarial review) runs for all HIGH and CRITICAL findings. The Judge's verdict replaces the initial severity. Also review MEDIUM findings that have a confidence score ≥ 80 in their finding file, or where the finding notes a potential upgrade path to HIGH.
-
----
-
-## Output
-
-All output lives in `audit/`:
-- `audit/metadata.md` — audit parameters
-- `audit/manifest.md` — recon output (subsystem map)
-- `audit/findings/[ID].md` — individual findings (written by hunt agents, updated in Stage 5 and 6)
-- `audit/progress/[subsystem].md` — subsystem checkpoints (written by hunt agents)
-- `audit/report.md` — final consolidated report
-
-The user can `ls audit/findings/` at any time to see confirmed findings as the audit progresses.
-
----
-
-## The Audit Is Not Complete
-
-No audit covers everything. The value is in findings confirmed plus coverage honestly reported.
-
-**What this audit does well:** systematic pattern matching against 20 historical vulnerability families, structured trust-boundary analysis, quantitative resource accounting, heuristic structural suspicion exploration.
-
-**What it may miss:** novel vulnerability classes with no historical precedent, complex multi-step chains spanning many subsystems, business logic bugs specific to this protocol's economic design, timing-dependent bugs requiring dynamic analysis, cryptographic implementation correctness.
-
-If a subagent discovers a vulnerability class not covered by P1-P20, flag it in the report as a candidate for future pattern inclusion.

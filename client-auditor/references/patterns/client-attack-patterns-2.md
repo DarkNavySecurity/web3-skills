@@ -4,7 +4,7 @@ Pattern families extracted from historical blockchain client vulnerabilities acr
 
 ---
 
-## P5. Vote/Signature Deduplication Failures
+## PAT-05. Vote/Signature Deduplication Failures
 
 **Broken invariant**
 Quorum signals must count unique, authorized participants exactly once.
@@ -43,7 +43,7 @@ Effects include halts, forged approvals, incorrect nonces, and double-spend styl
 
 ---
 
-## P6. Non-Deterministic Execution Causing Chain Split
+## PAT-06. Non-Deterministic Execution Causing Chain Split
 
 **Broken invariant**
 Every honest node must derive the same result from the same block inputs and prior state.
@@ -82,7 +82,7 @@ Nodes diverge on canonical state, reject each other's blocks, or deadlock migrat
 
 ---
 
-## P7. RPC/API Endpoint Crash via Crafted Input
+## PAT-07. RPC/API Endpoint Crash via Crafted Input
 
 **Broken invariant**
 Public API input must never reach an `unreachable`, nil dereference, or unbounded allocator.
@@ -120,7 +120,7 @@ The usual result is node-local DoS; if the endpoint is part of migration or cons
 
 ---
 
-## P8. Fee / Gas Calculation Errors
+## PAT-08. Fee / Gas Calculation Errors
 
 **Broken invariant**
 Charged fees, refunded fees, and priority ordering must match the actual resource consumption and payer identity.

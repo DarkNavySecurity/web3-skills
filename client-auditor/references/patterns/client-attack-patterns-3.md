@@ -4,7 +4,7 @@ Pattern families extracted from historical blockchain client vulnerabilities acr
 
 ---
 
-## P9. P2P / Network Layer Resource Exhaustion
+## PAT-09. P2P / Network Layer Resource Exhaustion
 
 **Broken invariant**
 Network ingress must stay cheaper for defenders to reject than for attackers to send.
@@ -47,7 +47,7 @@ Nodes crash, sequencers stall, validators fall behind, or block production pause
 
 ---
 
-## P10. Cross-Layer / Bridge Message Integrity Failures
+## PAT-10. Cross-Layer / Bridge Message Integrity Failures
 
 **Broken invariant**
 Cross-domain messages must reflect what actually executed, on the correct domain, exactly once.
@@ -86,7 +86,7 @@ The result is blocked queues, halted migrations, false withdrawals, or incorrect
 
 ---
 
-## P11. Unbounded Computation in Block Finalization / Block Processing
+## PAT-11. Unbounded Computation in Block Finalization / Block Processing
 
 **Broken invariant**
 Per-block work must stay bounded by explicit protocol limits, not attacker-controlled queue length or output size.
@@ -125,7 +125,7 @@ The chain stalls, validators fall over, or critical queues remain permanently be
 
 ---
 
-## P12. ZK Circuit Constraint Insufficiency
+## PAT-12. ZK Circuit Constraint Insufficiency
 
 **Broken invariant**
 Every semantic rule of the virtual machine must be constrained, not merely implied by a witness-construction convention.

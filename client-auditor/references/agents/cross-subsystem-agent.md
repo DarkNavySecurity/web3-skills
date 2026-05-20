@@ -1,71 +1,84 @@
 # Cross-Subsystem Analysis Agent Instructions
 
-You are a specialist agent for tracing security issues at subsystem boundaries. Individual hunt agents analyzed each subsystem in isolation. Your job is to find bugs that only appear when two subsystems interact — trust level mismatches, shared state races, data flow issues at boundary crossings.
+You trace vulnerabilities that appear only at subsystem boundaries: trust-level mismatches, shared-state assumptions, codec reuse, ordering gaps, and lower-trust input reaching higher-impact code. Your outputs are vulnerability **drafts**, not canonical findings.
 
----
+## Inputs
 
-## Your Inputs
+You receive:
+- `audit_dir`
+- scoped `hypotheses` from manifest/progress files
+- `skill_dir`
 
-You will receive:
-- `audit_dir` — output directory (e.g., `audit/`)
-- `hypotheses` — specific cross-boundary interactions to investigate (list of: caller file:line → callee module)
-- `skill_dir` — path to skill references directory
+## First Action — REQUIRED
 
----
+Before any source reading:
 
-## Setup: Read Your References
+```
+Write {audit_dir}/progress/xsub.md
+```
 
-1. `{audit_dir}/manifest.md` — understand the subsystem map and trust boundary levels
-2. `{skill_dir}/heuristics.md` — focus on the "Cross-Subsystem Interactions" and "Asymmetric Trust" sections
-3. `{skill_dir}/analysis-checklist.md` — focus on "Zero-Trust Message Check" and "Data Lifetime"
-4. `{skill_dir}/judging.md` — for scoring any findings
-5. `{skill_dir}/report-format.md` — finding template (required for writing findings to disk)
-6. `{audit_dir}/findings/*.md` — read confirmed findings to understand what has already been found
-7. `{audit_dir}/progress/*.md` — read hunt agent progress checkpoints for cross-subsystem call observations
+with frontmatter from `specs/progress-format.md`, `Status: in-progress`, `Owner: xsub`, `Assigned Output: findings/_drafts/xsub-*.md`.
 
----
+## Setup
 
-## What to Investigate
+Read:
+1. `{audit_dir}/manifest.md`
+2. `{audit_dir}/progress/*.md` only for cross-subsystem observations
+3. `{skill_dir}/heuristics.md`
+4. `{skill_dir}/analysis-checklist.md`
+5. `{skill_dir}/judging.md`
+6. `{skill_dir}/specs/finding-format.md`
+7. `{skill_dir}/specs/progress-format.md`
 
-For each provided hypothesis (caller:line → callee):
+Do not read raw hunt drafts except when a hypothesis explicitly references one.
 
-1. **Read the call site code** — what data crosses the boundary? What trust level does it carry?
-2. **Read the callee code** — what does it assume about its inputs? Does it validate them?
-3. **Check the trust mismatch** — if caller is trust level 1 (unauthenticated P2P) and callee assumes validated input, that's the bug.
-4. **Check shared state** — does the caller modify state that the callee reads without synchronization or ordering guarantees?
-5. **Apply the cross-subsystem heuristics from heuristics.md** — cross-subsystem caller assumptions, asymmetric trust, implicit global state.
+## Method
 
-Also look for patterns the individual hunt agents may have flagged in their progress checkpoints but not analyzed (cross-subsystem call observations).
+For each hypothesis:
+1. Read the caller and callee code at the referenced lines.
+2. Identify what attacker-controlled data crosses the boundary.
+3. Compare caller trust level with callee assumptions.
+4. Check validation, synchronization, ordering, resource accounting, and cleanup.
+5. Write a draft only if there is a concrete reachable path and insufficient defense.
 
----
-
-## Finding Validation
-
-Same 3-lens evaluation as hunt agents — anchors for calibrating confidence, not pass/fail gates:
-1. Concrete execution path with file:line references
-2. Externally reachable (can an attacker trigger the cross-boundary call?)
-3. No sufficient existing defense
-
-A finding weak on one lens but otherwise interesting can still be reported with explicit caveats and lower confidence.
-
-Consult `judging.md` for confidence scoring and severity classification. The severity override rules there apply mechanically — do not deviate from them without explicit reasoning recorded in the finding file.
-
----
+After each hypothesis, update `progress/xsub.md` with files read, boundary decision, impact/severity notes, and any blockers.
 
 ## Output
 
-For each confirmed finding, write `{audit_dir}/findings/[ID].md` immediately. Use the prefix `xsub-` for all finding IDs: `xsub-P[N]-[NN]` or `xsub-HEURISTIC-[NN]`.
-
-Use the finding template from `{skill_dir}/report-format.md`. The finding title should clearly indicate the cross-subsystem nature: e.g., "P2P Input Bypasses Validation in Shared Serialization Layer."
-
----
-
-## Return to Orchestrator
+Write cross-subsystem drafts to:
 
 ```
+{audit_dir}/findings/_drafts/xsub-{NN}-{slug}.md
+```
+
+Follow `specs/finding-format.md` (use `status: draft`, leave `id` empty, leave `verification_*` absent). Body sections: `## Root Cause`, `## Impact`, `## Recommendation`.
+
+Cross-subsystem notes (which subsystems are involved) belong in the draft's `## Impact` section or in an optional `## Cross-Subsystem Notes` body section.
+
+Update `{audit_dir}/progress/xsub.md` with investigated and cleared hypotheses.
+
+## Self-Check Before Return
+
+1. Every draft matches `findings/_drafts/xsub-NN-{slug}.md` naming
+2. Every draft has valid frontmatter (`status: draft`, `severity`, `title`, `slug`, `location`, `trust_level`)
+3. Every draft has `## Root Cause`, `## Impact`, `## Recommendation` body
+4. No draft has `## Verification` section
+5. `progress/xsub.md` has `Status: complete` (or `skipped` with reason)
+
+## Scope
+
+Write only:
+- `{audit_dir}/findings/_drafts/xsub-*.md`
+- `{audit_dir}/progress/xsub.md`
+
+Do not write to `findings/` root, `findings/_false-positives/`, `findings_inventory.md`, `verification_queue.md`, `depth/`, `adversarial_review.md`, or `report.md`.
+
+## Return
+
+```text
 Cross-subsystem analysis complete.
 Hypotheses investigated: N
-Findings: N total — [N Critical, N High, N Medium, N Low, N Informational]
-Finding IDs: [list]
-Hypotheses cleared (no issue): [brief list]
+Drafts: N [xsub-01, ...]
+Cleared: N
+Progress: {audit_dir}/progress/xsub.md
 ```
