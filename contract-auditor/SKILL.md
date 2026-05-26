@@ -25,7 +25,7 @@ Mission: find every way to steal funds, lock funds, grief users, or break invari
 
 ## Version Check
 
-After printing the banner, run two parallel tool calls: (a) Read `~/.claude/skills/contract-auditor/VERSION`, (b) Bash `curl -sf --connect-timeout 2 --max-time 5 https://raw.githubusercontent.com/DarkNavySecurity/web3-skills/main/contract-auditor/VERSION`. If the remote fetch succeeds and the remote version is greater than the local version, print:
+After printing the banner, resolve `{SKILL_DIR}` to the absolute installation path for this skill on the current host. Then run these two checks in parallel if the host supports parallel reads/commands: (a) read `{SKILL_DIR}/VERSION`, (b) run `curl -sf --connect-timeout 2 --max-time 5 https://raw.githubusercontent.com/DarkNavySecurity/web3-skills/main/contract-auditor/VERSION`. If the remote fetch succeeds and the remote version is greater than the local version, print:
 
 > ⚠️ You are not using the latest version. Please upgrade for best security coverage.
 
@@ -53,9 +53,9 @@ Print the banner, run the Version Check, then:
    - Do not audit tests, scripts, mocks, dependencies, or generated artifacts by default, including nested package directories in monorepos. Exclude nested `lib/` or `libs/` only when the path is clearly a vendored dependency root, not when it appears inside first-party source roots like `src/` or `contracts/`. If the user explicitly passes one of those files as `$filename`, include it because they intentionally scoped it.
 2. Resolve `{resolved_path}`:
    ```
-   Set {resolved_path} = ~/.claude/skills/contract-auditor/references
+   Set {resolved_path} = {SKILL_DIR}/references
    Verify: Read {resolved_path}/knowledge/checklist.md (first 3 lines)
-   If Read fails: Glob **/contract-auditor/references/knowledge/checklist.md
+   If Read fails: use the host's file search to find contract-auditor/references/knowledge/checklist.md
      and derive {resolved_path} from the result (two levels up).
    ```
 3. Create a temp directory with `mktemp -d "${TMPDIR:-/tmp}/contract-auditor.XXXXXX"` — capture as `{temp_dir}`. Do not use a timestamp-only directory; concurrent runs must not share state.
@@ -70,7 +70,7 @@ Print the banner, run the Version Check, then:
 
 Read `{resolved_path}/agents/context-and-analysis-agent.md`.
 
-**Delegate context building AND analysis to a single subagent.** Spawn a foreground subagent with the full text of `context-and-analysis-agent.md` and:
+**Delegate context building AND analysis to a single subagent.** Use the host's default general-purpose subagent facility with the full text of `context-and-analysis-agent.md` and:
 - In-scope file list
 - Context output directory: `{temp_dir}/context/`
 - Analysis output file path: `{temp_dir}/analysis.md`
@@ -95,13 +95,13 @@ The main thread does NOT need to read the raw context files — the analysis out
 
 Read `{resolved_path}/agents/hunt-agent.md`.
 
-Spawn hunt agents in parallel as foreground Agent tool calls (do NOT use `run_in_background`).
+Spawn hunt agents in parallel using the host's default general-purpose subagent facility. Do not run them as detached/background jobs; the orchestrator must wait for each output file.
 
 For each agent, use the corresponding allocation block from `{temp_dir}/analysis.md` to construct the prompt. Each agent prompt contains:
 1. Full text of `hunt-agent.md`
 2. **Assigned call paths**: copy the call paths from this agent's allocation block (already includes file:line detail)
 3. **Cross-agent state hints**: copy the hints table from this agent's allocation block
-4. **Context file paths**: provide the path to `{context_dir}/` and list the primary and boundary files from this agent's allocation block. The agent reads these from disk — do NOT inline their content. For boundary contracts, tell the agent to read only the Entry Points table. Do NOT point agents to `index.md`, `call-paths.md`, or `state-coupling.md`.
+4. **Context file paths**: provide the path to `{context_dir}/` and list the primary and boundary files from this agent's allocation block. The agent reads these from disk — do NOT inline their content. For boundary contracts, tell the agent to read only the Entry Points, State Architecture, and Cross-Contract Dependencies sections. Do NOT point agents to `index.md`, `call-paths.md`, or `state-coupling.md`.
 5. **Threat model summary**: copy from the analysis output
 6. **Trust model**: copy the trust model table from the analysis output. The agent must apply severity ceilings when a finding depends on a trusted role's action.
 7. **Checklist file path**: `{resolved_path}/knowledge/checklist.md` — the agent reads this from disk on demand. Do NOT inline the checklist content in the prompt.
@@ -122,14 +122,16 @@ Read all agent output files from `{temp_dir}`. Each hunt output is structured as
 
 Do not treat text outside `# Confirmed Findings` as a finding.
 
+When moving hunt-agent findings into the final report, normalize their internal `### [Severity] N. Title` headings to the final `## [Severity] N. Title` format required by `report-formatting.md`.
+
 **Dedup** (you do this, leveraging your code understanding):
 1. Group findings by location (contract + function/line range)
 2. Within each group: normalize to root cause — since agents own distinct paths, true duplicates should be rare; they mainly arise at boundary crossings where two agents flagged the same interface issue from opposite sides
 3. Across groups: detect chains — can finding A + finding B compound into a worse attack?
 4. Assign severity to each finding: **Critical**, **High**, **Medium**, **Low**, **Design Advisory**, or **Informational** per `finding-protocol.md`. Sort by severity (Critical → High → Medium → Low → Design Advisory → Informational), re-number sequentially.
 
-**Coverage assessment**: Use the **Entry Point Census** table from `{temp_dir}/analysis.md` as ground truth — it lists every contract with its total entry point count (M) and function names. Compare agent-reported coverage (N) against this census. Do NOT rely solely on agents' self-reported M values.
-- For each contract in the census: sum the entry points covered by at least one agent's DFS or boundary check. Flag any contract where coverage < M.
+**Coverage assessment**: Use the **Entry Point Census** table from `{temp_dir}/analysis.md` as ground truth — it lists every contract with its total entry point count (M) and function names. Compare agent-reported DFS coverage (N) against this census. Do NOT rely solely on agents' self-reported M values.
+- For each contract in the census: count only entry points that received a line-by-line DFS pass toward N. Track boundary checks separately and mention them in the coverage notes, but do not count boundary checks as DFS coverage. Flag any contract where DFS coverage < M.
 - Are all call paths from the allocation covered by their assigned agent?
 - Are all in-scope contracts covered by at least one agent?
 - If significant gaps exist, spawn targeted follow-up agents for uncovered areas. If a follow-up round produces zero new findings at Medium or above, further rounds are unlikely to be productive — stop.
@@ -147,7 +149,9 @@ Write the merged findings to `{temp_dir}/preliminary-findings.md`.
 
 Read `{resolved_path}/agents/adversarial-agent.md`.
 
-Spawn **one falsifier agent** as a foreground Agent tool call (do NOT use `run_in_background`):
+If there are zero merged findings, skip this stage and state that no falsifier was spawned because there were no findings to challenge.
+
+Spawn **one falsifier agent** using the host's default general-purpose subagent facility:
 
 **Falsifier** (adversarial-agent.md):
 1. Full text of `adversarial-agent.md`
@@ -170,7 +174,7 @@ Read `{resolved_path}/report-formatting.md`.
 Produce the final report per report-formatting.md structure:
 - Section 1: Report header with scope, mode, date
 - Section 2: Findings summary table (sorted by severity: Critical → High → Medium → Low → Design Advisory → Informational)
-- Section 2.5: Coverage summary — pivot agent coverage logs (which report by call path) into the contract-level table format. M = total entry points per contract from the Entry Point Census in `{temp_dir}/analysis.md`; N = entry points covered by at least one agent's DFS or boundary check. Note which agents covered which contracts.
+- Section 2.5: Coverage summary — pivot agent coverage logs (which report by call path) into the contract-level table format. M = total entry points per contract from the Entry Point Census in `{temp_dir}/analysis.md`; N = entry points covered by at least one line-by-line DFS pass. Note boundary checks separately in the Analysis column.
 - Section 3: All findings, sorted by severity
 
 If `--file-output` is set, write the report to a file (path per report-formatting.md) and print the path. Otherwise print the report to terminal.

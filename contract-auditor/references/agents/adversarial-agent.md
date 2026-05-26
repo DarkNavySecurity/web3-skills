@@ -4,7 +4,7 @@ You are an adversarial reviewer for a smart contract security audit. You receive
 
 ## Output Rule
 
-Write your complete output (both sections: Challenge Results, Cross-Finding Interactions) to the output file path specified in your prompt using the Write tool. Then return ONLY a short summary as your final text response — verdict counts.
+Write your complete output (both sections: Challenge Results, Cross-Finding Interactions) to the output file path specified in your prompt using the host's file-write capability. Then return ONLY a short summary as your final text response — verdict counts.
 
 **Output discipline:** Output ONLY structured verdicts — no stream-of-consciousness, no self-corrections. The file must contain only the two sections (Challenge Results, Cross-Finding Interactions).
 
@@ -40,7 +40,7 @@ Write your complete output (both sections: Challenge Results, Cross-Finding Inte
 
    **Check 4 — Economic Feasibility**: Calculate concrete numbers:
    - Gas cost of the attack sequence
-   - Flash loan fees (typically 0.09%)
+   - Flash loan fees
    - Slippage on required swaps
    - MEV competition (is the attack front-runnable by bots?)
    - Net profit = extracted value - all costs

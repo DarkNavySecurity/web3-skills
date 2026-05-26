@@ -141,7 +141,7 @@ When you encounter a code pattern below during analysis, execute the correspondi
 1. Stale data: is `updatedAt` from Chainlink checked? Is there a max-age threshold?
 2. `answer <= 0`: is this handled? Negative/zero prices should revert
 3. L2 sequencer: is sequencer uptime feed checked? (Arbitrum, Optimism)
-4. AMM spot price: `getReserves()` or `slot0()` is flash-loan manipulable. Need TWAP with sufficient window (>= 30 min)
+4. AMM spot price: `getReserves()` or `slot0()` is flash-loan manipulable. Need TWAP with sufficient window
 5. Decimal mismatch: oracle decimals vs token decimals. USDC=6, Chainlink ETH/USD=8, WBTC=8
 6. **Oracle update timing**: can an oracle/keeper update and a user operation execute in the same block or transaction? If a stale/old price is safe but a just-updated price is unsafe (or vice versa), check whether the protocol snapshots price, enforces heartbeat/deviation bounds, or gives users a delay/exit window.
 
@@ -196,19 +196,26 @@ When you encounter a code pattern below during analysis, execute the correspondi
 
 ## Low-Level / Assembly / Storage Layout
 
-**Trigger**: `assembly`, Yul blocks, `sload`, `sstore`, `mload`, `mstore`, `calldatacopy`, `returndatacopy`, bit shifts/masks, packed fields, `delegatecall`, proxy fallback dispatch, custom storage slots, `bytes4` selectors, `abi.encodeWithSelector`, `msg.sig`, `fallback`, `receive`, `create`, `create2`, `selfdestruct`, `PUSH0`, chain-specific deployment
+**Trigger**: `assembly`, Yul blocks, `calldataload`, `calldatacopy`, manual ABI decoding, `shr`, `shl`, `and`, `or`, `sload`, `sstore`, `mload`, `mstore`, `returndatacopy`, bit shifts/masks, packed fields, `delegatecall`, proxy fallback dispatch, custom storage slots, `bytes4` selectors, `abi.encodeWithSelector`, `msg.sig`, `fallback`, `receive`, `create`, `create2`, `selfdestruct`, `PUSH0`, chain-specific deployment
 
 1. **Assembly justification**: is low-level code necessary? If the same behavior can be safely expressed in Solidity and no gas/compatibility reason is documented, treat the assembly as high-risk and verify every opcode effect.
-2. **Memory safety**: when assembly writes memory, check free memory pointer `0x40`, scratch space, zero slot `0x60`, allocated length words, and bounds for `calldatacopy`/`returndatacopy`. Ensure returned dynamic data length cannot force unbounded memory expansion.
-3. **Storage slot correctness**: for `sload`/`sstore` or custom slots, verify slot constants, namespace uniqueness, and no collision with compiler-assigned storage, proxy slots, diamond storage, or inherited variables.
-4. **Upgradeable storage layout**: for proxy/UUPS/beacon/diamond systems, verify new variables are appended only, types/order of existing variables are unchanged, base contract storage changes do not shift child storage, storage gaps are preserved, and namespaced storage identifiers are unique.
-5. **Bit packing**: when multiple values share one word, verify masks clear old bits before `or`, shifts use the correct offset and width, signed values are sign-extended deliberately, and values are range-checked before packing to prevent field bleed.
-6. **Selector collision**: compute or reason about every externally routed `bytes4` selector in proxies, diamonds, routers, and fallback dispatch. Check for collisions between proxy admin functions and implementation functions, facet selectors, plugin modules, and manually specified selectors.
-7. **Fallback/receive dispatch**: fallback code must reject unknown selectors unless intentionally forwarding. If it forwards, verify target address is trusted, return data is bounded, `msg.value` handling is correct, and admin calls cannot accidentally delegate into user logic.
-8. **Delegatecall context**: `delegatecall` executes in the caller's storage context and preserves `msg.sender`/`msg.value`. Check user-controlled target/data, initializer locks, selfdestruct paths in implementation logic, and storage assumptions across caller/callee.
-9. **Target-chain opcode compatibility**: if the deployment chain is not Ethereum mainnet, or compiler/opcode choices are chain-sensitive, verify `PUSH0`, `CREATE/CREATE2`, `.transfer()` gas behavior, precompile availability, and chain-specific system-contract semantics. A contract safe on one EVM chain can be undeployable or fund-locking on another.
+2. **Assembly ABI / calldata decoding**: when assembly reads calldata with `calldataload`/`calldatacopy`, manually decodes selectors/arguments, or applies shifts/masks to calldata-loaded words, build a calldata source layout table before judging safety:
+   - For top-level ABI calldata, bytes `0..3` are the external selector. The argument head starts at byte `4`; each top-level head word is 32 bytes, so arg0 head is bytes `4..35`, arg1 head is bytes `36..67`, and so on.
+   - For dynamic top-level arguments, the head word is an offset relative to the start of the argument block, not relative to byte `0`. The tail at `4 + offset` contains the dynamic encoding, typically a length word followed by data/elements; nested dynamic types add their own relative offsets.
+   - Map each hard-coded offset to the intended Solidity parameter and type. For dynamic types, resolve the top-level offset first, then map any tail reads against the decoded tail layout. Verify word alignment, dynamic offsets, and address extraction against the ABI layout. For a direct ABI-encoded `address` argument, the 32-byte word is `12` zero bytes followed by the `20` address bytes; `shr(96, calldataload(offset))` is the normal extraction pattern when `offset` points to that address word.
+   - Check every external entry point that can reach the assembly block. Internal calls and public wrapper calls do **not** create new calldata; `calldataload` still reads the original external calldata, not the callee's Solidity parameters.
+   - If Solidity already decoded the parameter, compare the decoded value with the assembly-loaded value for every caller. Any caller where they differ can redirect value, bypass validation, or revert unexpectedly.
+   - Do not report a direct-call issue merely because an address is extracted with `shr(96, calldataload(addressSlot))`; report only when the offset, caller calldata, dynamic layout, or decoded-vs-loaded value can differ.
+3. **Memory safety**: when assembly writes memory, check free memory pointer `0x40`, scratch space, zero slot `0x60`, allocated length words, and bounds for `calldatacopy`/`returndatacopy`. Ensure returned dynamic data length cannot force unbounded memory expansion.
+4. **Storage slot correctness**: for `sload`/`sstore` or custom slots, verify slot constants, namespace uniqueness, and no collision with compiler-assigned storage, proxy slots, diamond storage, or inherited variables.
+5. **Upgradeable storage layout**: for proxy/UUPS/beacon/diamond systems, verify new variables are appended only, types/order of existing variables are unchanged, base contract storage changes do not shift child storage, storage gaps are preserved, and namespaced storage identifiers are unique.
+6. **Bit packing**: when multiple values share one word, verify masks clear old bits before `or`, shifts use the correct offset and width, signed values are sign-extended deliberately, and values are range-checked before packing to prevent field bleed.
+7. **Selector collision**: compute or reason about every externally routed `bytes4` selector in proxies, diamonds, routers, and fallback dispatch. Check for collisions between proxy admin functions and implementation functions, facet selectors, plugin modules, and manually specified selectors.
+8. **Fallback/receive dispatch**: fallback code must reject unknown selectors unless intentionally forwarding. If it forwards, verify target address is trusted, return data is bounded, `msg.value` handling is correct, and admin calls cannot accidentally delegate into user logic.
+9. **Delegatecall context**: `delegatecall` executes in the caller's storage context and preserves `msg.sender`/`msg.value`. Check user-controlled target/data, initializer locks, selfdestruct paths in implementation logic, and storage assumptions across caller/callee.
+10. **Target-chain opcode compatibility**: if the deployment chain is not Ethereum mainnet, or compiler/opcode choices are chain-sensitive, verify `PUSH0`, `CREATE/CREATE2`, `.transfer()` gas behavior, precompile availability, and chain-specific system-contract semantics. A contract safe on one EVM chain can be undeployable or fund-locking on another.
 
-**NOT a low-level issue when**: assembly is isolated, documented, has a high-level equivalent/test oracle, memory and returndata are bounded, and storage slots/selectors are mechanically derived from audited constants.
+**NOT a low-level issue when**: assembly is isolated, documented, has a high-level equivalent/test oracle, every hard-coded calldata/memory/storage offset is proven valid for all callers, memory and returndata are bounded, and storage slots/selectors are mechanically derived from audited constants.
 
 ---
 

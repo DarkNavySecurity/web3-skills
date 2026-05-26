@@ -42,6 +42,10 @@ Use a path-stable filename so context files never collide. Derive `{safe-path}` 
 | Function | Visibility | Access | Line | Risk Notes |
 |----------|-----------|--------|------|-----------|
 
+### Security-Critical Views
+| Function | Line | Used By | Why It Matters |
+|----------|------|---------|----------------|
+
 ### State Architecture
 | Variable | Type | Written By | Read By | Notes |
 |----------|------|-----------|---------|-------|
@@ -70,11 +74,12 @@ Contains the State Coupling table and Adjacency List (see Call Path Graph sectio
 
 1. Read ALL in-scope source files in parallel.
 2. Per contract: identify every external/public state-changing function — these are the entry points. Exclude `view`/`pure` functions. Classify access control (unrestricted, role-restricted, pattern-restricted, contract-only).
-3. Map state architecture: key storage variables, who writes them, who reads them, what connects them (sentinels, invariants, coupled updates).
-4. Trace value flows: how do funds (ETH, tokens, shares) enter and exit? Which functions move value?
-5. Map cross-contract calls: which contracts call each other, at what lines, with what trust assumptions.
-6. Record observations: anything suspicious, unusual, or worth investigating — with specific `file:line` citations. These are your professional security judgment, not conclusions. Do not create first-class priority maps by vulnerability category; keep observations tied to concrete code locations and call paths.
-7. Write output files:
+3. Identify security-critical view/pure functions separately: pricing, accounting previews, signature validation, eligibility checks, oracle reads, conversion rates, or values consumed by state-changing functions or external integrators. They do not count toward entry point coverage M, but they must be documented for hunt agents.
+4. Map state architecture: key storage variables, who writes them, who reads them, what connects them (sentinels, invariants, coupled updates).
+5. Trace value flows: how do funds (ETH, tokens, shares) enter and exit? Which functions move value?
+6. Map cross-contract calls: which contracts call each other, at what lines, with what trust assumptions.
+7. Record observations: anything suspicious, unusual, or worth investigating — with specific `file:line` citations. These are your professional security judgment, not conclusions. Do not create first-class priority maps by vulnerability category; keep observations tied to concrete code locations and call paths. When a function contains assembly/manual calldata, memory, storage, or selector decoding, cite the exact lines and note every wrapper or external entry point that can reach that block. For manual calldata or selector decoding, record whether hard-coded calldata offsets match each caller's actual ABI layout. For manual memory or storage access, record the touched memory ranges, storage slots, masks, and packing assumptions for hunt agents to verify later.
+8. Write output files:
    - Create `{context_dir}` directory
    - Write `index.md` with project summary and contract table
    - Write one `{safe-path}__{ContractName}.md` for EVERY contract/library/interface in every in-scope file. Multi-contract files produce multiple context files. Libraries contain critical arithmetic, encoding, and storage logic that hunt agents must analyze. If a file has no entry points, its context file should still document its functions, internal logic, and which contracts call it.
@@ -91,7 +96,7 @@ Spend more analysis time on:
 
 Spend less time on:
 - Simple getters/setters with clear access control
-- View/pure functions (excluded from entry points but note if they influence state-changing logic)
+- View/pure functions that do not influence pricing, eligibility, signatures, accounting, or state-changing logic
 - Standard library patterns (ERC20 transfer wrappers, etc.)
 
 ### Call Path Graph
@@ -187,6 +192,13 @@ Write your analysis output to `{analysis_file}`. Use exactly this structure:
 | {ContractName} | {path} | {count} | {func1}, {func2}, ... |
 
 This table is the ground truth for coverage assessment. M = total external/public state-changing functions per contract (same set as the Entry Points tables in the per-contract context files). The orchestrator uses this to verify agent-reported coverage — agents cannot define their own denominator.
+
+## Security-Critical Views
+| Contract | File | Function | Used By | Why It Matters |
+|----------|------|----------|---------|----------------|
+| {ContractName} | {path} | {viewFunc} | {caller/integrator} | {pricing/accounting/signature/eligibility role} |
+
+These functions do not count toward Entry Point Census M, but any agent whose path depends on them must analyze their semantics.
 
 ## Agent Allocation
 

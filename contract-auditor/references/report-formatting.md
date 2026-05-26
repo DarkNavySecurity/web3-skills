@@ -54,6 +54,7 @@ Rules:
 - Within the same severity, order by impact (most impactful first).
 - Titles must match the `##` heading titles exactly.
 - Use short labels in the table: `Critical`, `High`, `Medium`, `Low`, `Design`, `Info`.
+- If there are no findings, include one row: `| - | None | No confirmed findings |`.
 
 Then `---` before the coverage summary.
 
@@ -71,8 +72,8 @@ After the findings summary table and before the findings section, include:
 | <Contract.sol> | N / M | DFS by Agent 2 (redeem paths); boundary-check by Agent 1 |
 
 - M = total entry points from the context map (shared ground truth across all agents)
-- N = entry points with at least one DFS pass (from agent coverage logs)
-- "boundary-check" = agent followed a call into this contract but only verified the interface, not internal logic
+- N = entry points with at least one line-by-line DFS pass (from agent coverage logs)
+- "boundary-check" = agent followed a call into this contract but only verified the interface, state architecture, and cross-contract dependency surface, not full internals. Boundary checks do not count toward N.
 - If any contract has coverage < 80%, flag it as a gap
 - If follow-up analysis was spawned for gaps, note what it targeted
 
