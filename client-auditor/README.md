@@ -67,11 +67,11 @@ audit/
 
 `audit/progress/` is the live control plane. Required files vary by command phase: `progress/recon.md`, `progress/hunt-{focus}.md`, `progress/xsub.md`, `progress/inventory.md`, `progress/verification_queue.md`, `progress/verify-{ID}.md`, `progress/depth-{lens}.md`, `progress/adversarial.md`, `progress/report.md`.
 
-Agents create their own progress file as their very first Write call — the orchestrator does not pre-create skeletons. Completion gates reject phases whose progress files are not terminal (`complete` | `skipped` | `blocked`).
+Agents create their own progress file as their first file-write action — the orchestrator does not pre-create skeletons. Completion gates reject phases whose progress files are not terminal (`complete` | `skipped` | `blocked`).
 
 ## Gates
 
-Each phase ends with an inline Bash snippet (in `SKILL.md`) that the orchestrator runs to verify required artifacts exist and have valid frontmatter. Snippets are bash, not zsh — invoke via `bash -lc '<snippet>'` on macOS.
+Each phase ends with an inline Bash snippet (in `SKILL.md`) that the orchestrator runs to verify required artifacts exist and have valid frontmatter. Snippets are written for bash; invoke them with `bash -lc '<snippet>'` or an equivalent bash runner.
 
 The most important gate invariants:
 - `spawn_manifest.md` has at least one `Required = YES` row
@@ -92,4 +92,4 @@ The most important gate invariants:
 - **New pattern**: add to the appropriate `references/patterns/client-attack-patterns-N.md` (use PAT-NN id) and `references/routing/pattern-routing.md`.
 - **New artifact shape**: update `references/specs/finding-format.md` (the schema authority) first, then the matching gate snippet in `SKILL.md` and any agent prompts that consume that shape.
 - **New agent**: add `references/agents/{name}-agent.md` with explicit Inputs / First Action (progress write) / Method / Output / Scope / Self-Check / Return sections, and wire from `SKILL.md` with explicit artifact ownership and a close-after-stage instruction.
-- **New gate**: add it inline in `SKILL.md` at the relevant Stage end. Use `st=` not `status=` (zsh reserved). Pin column indices in inline comments if you parse tables.
+- **New gate**: add it inline in `SKILL.md` at the relevant Stage end. Prefer shell-variable names such as `st=` over names that commonly collide with interactive shell built-ins. Pin column indices in inline comments if you parse tables.

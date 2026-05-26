@@ -26,7 +26,7 @@ Read:
 2. `{skill_dir}/specs/finding-format.md`
 3. `{skill_dir}/specs/progress-format.md`
 4. `{skill_dir}/judging.md`
-5. for each assigned `{ID}`: the finding file `{audit_dir}/findings/{PREFIX}-{NNN}-{slug}.md` — look it up via `ls findings/[CHMLI]-{NNN}-*.md` (the leading character class skips macOS `._*` sidecars; do not use `*-{NNN}-*.md` because the leading `*` would match sidecars)
+5. for each assigned `{ID}`: the finding file `{audit_dir}/findings/{PREFIX}-{NNN}-{slug}.md` — look it up via `ls findings/[CHMLI]-{NNN}-*.md` (the leading character class skips `._*` sidecars; do not use `*-{NNN}-*.md` because the leading `*` would match sidecars)
 6. only source files needed to evaluate assigned IDs
 
 Update `progress/adversarial.md` after each Red/Blue/Judge pass.

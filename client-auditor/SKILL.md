@@ -98,25 +98,25 @@ To detect a stalled agent, the orchestrator polls `audit/progress/` via `ls`, `f
 
 ## Workspace Sidecar Files
 
-When the project lives on a non-APFS filesystem (e.g. ExFAT external drive), macOS creates `._*` AppleDouble sidecar files next to every file written under `audit/`. These are benign metadata.
+Some hosts and filesystems create hidden metadata sidecars such as `._*` next to files written under `audit/`. These files are benign environment artifacts, not audit artifacts.
 
 - **Do not pause the audit** when `._*` files appear; do not delete them; do not treat them as unexpected workspace mutations.
-- All Bash gate snippets either use literal prefix patterns (e.g. `findings/[CHMLI]-*.md`, `_drafts/${focus}-*.md`) that naturally skip `._*`, or pass `! -name '._*'` to `find` when the glob would otherwise match them.
-- Agents that `ls` or glob a directory must apply the same exclusion (`find ... ! -name '._*'` or `grep -v '/\._'`).
+- Gate snippets either use literal prefix patterns (e.g. `findings/[CHMLI]-*.md`, `_drafts/${focus}-*.md`) that naturally skip `._*`, or pass `! -name '._*'` to `find` when the glob would otherwise match them.
+- Agents that list or glob a directory must apply the same exclusion (`find ... ! -name '._*'` or equivalent filtering).
 
 ## Agent Lifecycle
 
-Codex Agent Teams enforces a concurrent-thread cap (typically 5-6). At the end of each Stage, after the stage gate passes, the orchestrator must call `close_agent` on every completed worker spawned in that stage before spawning workers for the next Stage. Otherwise the next `spawn_agent` will fail with `agent thread limit reached` and require bulk-closing mid-pipeline.
+Use the host's default subagent facility. Some hosts limit concurrent worker threads or require completed workers to be explicitly released. At the end of each Stage, after the stage gate passes, release/close completed workers when the host exposes such a lifecycle operation before spawning workers for the next Stage.
 
-Specifically:
-- After **Stage 3 (Hunt)**: close all hunt workers once their drafts and progress files pass the hunt gate.
-- After **Stage 4 (Cross-subsystem)**: close the xsub worker.
-- After **Stage 5 (Inventory)**: close the inventory worker.
-- After **Stage 7 (Verification)**: close all verifier workers in batches; do not let completed verifier slots block Stage 8 spawns.
-- After **Stage 8 (Depth)**: close all depth workers, then re-spawn the inventory worker for the re-inventory step, then close it.
-- After **Stage 9 (Adversarial)**: close the adversarial worker.
+Specifically, if the host exposes worker lifecycle controls:
+- After **Stage 3 (Hunt)**: release all hunt workers once their drafts and progress files pass the hunt gate.
+- After **Stage 4 (Cross-subsystem)**: release the xsub worker.
+- After **Stage 5 (Inventory)**: release the inventory worker.
+- After **Stage 7 (Verification)**: release all verifier workers in batches; do not let completed verifier slots block Stage 8 spawns.
+- After **Stage 8 (Depth)**: release all depth workers, then re-spawn the inventory worker for the re-inventory step, then release it.
+- After **Stage 9 (Adversarial)**: release the adversarial worker.
 
-Worker state is on disk; closing a worker does not lose work.
+Worker state is on disk; releasing/closing a worker does not lose work.
 
 ## Gates — Cardinal Rule
 
@@ -124,13 +124,13 @@ When a gate snippet reports an inconsistency, the orchestrator must **never dele
 
 ## Schema Discipline
 
-The audit state is markdown frontmatter + body sections grepped by Bash gates. This is intentional — every artifact is human-inspectable and machine-parseable with `awk` / `grep` / `find`. But text protocols are fragile: a stray `|`, an upper/lower case typo, an unfilterd `._*` sidecar, or a column rename can break gates silently.
+The audit state is markdown frontmatter + body sections grepped by Bash gates. This is intentional — every artifact is human-inspectable and machine-parseable with `awk` / `grep` / `find`. But text protocols are fragile: a stray `|`, an upper/lower case typo, an unfiltered `._*` sidecar, or a column rename can break gates silently.
 
 Every agent and gate snippet treats `specs/finding-format.md` as the schema authority:
 
 - **Frontmatter values that flow into markdown tables MUST NOT contain `|`.** Agents replace `|` with `/` before write; gates that build tables `tr '|' '/'` on field substitution.
 - **Enum values are case-sensitive.** `severity: High` (title-case) and `verification_status: confirmed` (lowercase) are the only valid spellings.
-- **Glob patterns that may match macOS sidecars MUST filter** (`find ... ! -name '._*'` or use a character-class prefix that excludes a leading dot).
+- **Glob patterns that may match hidden sidecars MUST filter** (`find ... ! -name '._*'` or use a character-class prefix that excludes a leading dot).
 - **`spawn_manifest.md` / `verification_queue.md` column orders are part of the contract.** Inline comments in the gate snippets pin the column indices.
 - **Filename PREFIX MUST match the `severity` field's first letter** for canonical findings. Inventory enforces this; the inventory gate re-verifies it.
 
@@ -138,15 +138,15 @@ If a future change adds a column to any tabular artifact, update the matching ga
 
 ## Shell Binding
 
-All gate snippets in this file are **bash**, not POSIX `sh` and not `zsh`. The orchestrator must run each snippet under bash explicitly. On macOS where the default user shell is zsh, that means:
+All gate snippets in this file are written for **bash**, not POSIX `sh` or other interactive shells. When a shell is available, run each snippet under bash explicitly:
 
 ```bash
 bash -lc '<snippet>'
 ```
 
-or save the snippet to a temp file and `bash /tmp/gate.sh`. Do not paste snippets into a zsh prompt directly — zsh has reserved variables (`status`, `path`, `cdpath`, etc.) that collide with common script variables, and its `[[ ]]` test is not exactly the same as bash's.
+or save the snippet to a temp file and run it with bash. Do not paste snippets into another shell directly; shell-specific reserved variables and `[[ ]]` behavior can break otherwise valid gate snippets.
 
-Gate snippets in this file avoid named variables that collide with zsh built-ins (e.g. `status` is renamed `st`), but the safest convention is still to invoke them via `bash -lc`.
+Gate snippets in this file avoid named variables that commonly collide with interactive-shell built-ins (e.g. `status` is renamed `st`), but the safest convention is still to invoke them via `bash -lc` or an equivalent bash runner.
 
 ## Start Phase
 
@@ -228,7 +228,7 @@ done
 
 If a hunt failed terminally, the orchestrator may re-spawn just that focus (do not touch other agents' progress or drafts).
 
-After the hunt gate passes, **`close_agent` every hunt worker spawned in this Stage** before proceeding to Stage 4. Their progress / draft files are on disk; closing them does not lose work but frees Codex Agent Teams thread slots.
+After the hunt gate passes, release/close every hunt worker spawned in this Stage if the host exposes worker lifecycle controls before proceeding to Stage 4. Their progress / draft files are on disk; releasing them does not lose work.
 
 ### Stage 4 — Cross-Subsystem Drafts
 
@@ -257,7 +257,7 @@ cat > audit/progress/xsub.md <<EOF
 EOF
 ```
 
-After Stage 4, **`close_agent` the xsub worker** if one was spawned.
+After Stage 4, release/close the xsub worker if one was spawned and the host exposes worker lifecycle controls.
 
 ### Stage 5 — Inventory and Coverage
 
@@ -276,7 +276,7 @@ Inventory gate:
 ```bash
 test -f audit/findings_inventory.md && test -f audit/coverage.md \
   || { echo "FAIL: inventory outputs missing"; exit 1; }
-# every draft must have been promoted or superseded (exclude macOS ._* sidecars)
+# every draft must have been promoted or superseded (exclude ._* sidecars)
 leftover=$(find audit/findings/_drafts -maxdepth 1 -type f -name '*.md' ! -name '._*' 2>/dev/null | wc -l | tr -d ' ')
 if [ "$leftover" != "0" ]; then echo "FAIL: $leftover drafts unprocessed in _drafts/"; exit 1; fi
 # every canonical finding must have valid frontmatter AND filename PREFIX matches severity
@@ -295,7 +295,7 @@ done
 
 If inventory is missing or malformed, re-run the inventory agent. Stop here and summarize draft counts, reportable findings, coverage gaps, and what `/client-auditor verify` will need.
 
-After the inventory gate passes, **`close_agent` the inventory worker**.
+After the inventory gate passes, release/close the inventory worker if the host exposes worker lifecycle controls.
 
 ## Verify Phase
 
@@ -393,7 +393,7 @@ done
 
 If the gate fails, re-spawn the missing verifier(s). **Never delete verifier-written frontmatter or `## Verification` sections** to make the gate pass.
 
-After the verify gate passes, **`close_agent` every verifier worker spawned in this Stage** before proceeding to Stage 8 (deep) or terminating the verify command.
+After the verify gate passes, release/close every verifier worker spawned in this Stage if the host exposes worker lifecycle controls before proceeding to Stage 8 (deep) or terminating the verify command.
 
 ### Stage 8 — Deep Mode Lenses
 
@@ -410,9 +410,9 @@ Execute in order:
 
 **8.1 Spawn depth agents.** For each triggered lens, spawn one depth agent with `lens`, `audit_dir`, `{REF_DIR}`. Each agent writes `audit/depth/{lens}.md` plus promotion drafts at `audit/findings/_drafts/depth-{lens}-NN-{slug}.md` and `audit/progress/depth-{lens}.md`.
 
-**8.2 Wait + close.** `wait_agent` for all depth workers. When complete, `close_agent` each one (frees Codex thread slots before the inventory re-spawn).
+**8.2 Wait + release.** Wait for all depth workers using the host's subagent completion mechanism. When complete, release/close each one if the host exposes worker lifecycle controls before the inventory re-spawn.
 
-**8.3 Re-run inventory.** Spawn the inventory agent again with `audit_dir` and `{REF_DIR}`. It promotes the new depth drafts (assigning new `F-NNN` from the existing ID pool, preserving every prior `F-NNN`), may move verifier-REFUTED findings to `_false-positives/`, may rename files via `mv` if severity changed. Wait, then `close_agent` the inventory worker.
+**8.3 Re-run inventory.** Spawn the inventory agent again with `audit_dir` and `{REF_DIR}`. It promotes the new depth drafts (assigning new `F-NNN` from the existing ID pool, preserving every prior `F-NNN`), may move verifier-REFUTED findings to `_false-positives/`, may rename files via `mv` if severity changed. Wait for completion, then release/close the inventory worker if the host exposes worker lifecycle controls.
 
 **8.4 Re-run inventory gate** (same Bash snippet as Stage 5 inventory gate).
 
@@ -457,7 +457,7 @@ cat > audit/progress/adversarial.md <<EOF
 EOF
 ```
 
-After Stage 9, **`close_agent` the adversarial worker** (and any lingering inventory worker from Step 8.3 re-inventory or post-adversarial re-inventory). At this point every worker spawned during the verify command should be closed.
+After Stage 9, release/close the adversarial worker if one was spawned and the host exposes worker lifecycle controls. Also release any lingering inventory worker from Step 8.3 re-inventory or post-adversarial re-inventory. At this point every worker spawned during the verify command should be complete and releasable.
 
 Stop here. Summarize verifier verdicts, tests attempted, blockers, and any report input gaps.
 
@@ -469,7 +469,7 @@ Read `agents/report-agent.md`, `references/report-format.md`, and `specs/progres
 
 Report stage is formatting only. Do not run tests, PoCs, benchmarks, harness checks, source validation, inventory reconciliation, verifier re-checks, or deep lenses. If report inputs appear stale or inconsistent, the report agent discloses the inconsistency in `audit/report.md` under `Report Input Gaps`.
 
-After the report gate passes, **`close_agent` the report worker**.
+After the report gate passes, release/close the report worker if the host exposes worker lifecycle controls.
 
 Report gate:
 
@@ -490,4 +490,3 @@ Recover state from disk in this order: `metadata.md`, `progress/`, `manifest.md`
 - `start` is complete when the recon, hunt, xsub, and inventory gates all pass and `findings/_drafts/` is empty.
 - `verify` is complete when the verify gate passes (every `Required = true` queue row has a finding file with `verification_status` set). In deep mode, also depth lens artifacts exist for every triggered lens and `progress/adversarial.md` exists.
 - `report` is complete when the report gate passes.
-

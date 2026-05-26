@@ -4,7 +4,7 @@ Progress artifacts make every phase observable while agents are still running. T
 
 ## Required Behavior
 
-- **Agent first action**: as the very first Bash/Write call before any source reading, the agent writes its assigned progress file at the path the orchestrator gave it (or the standard path below). The file starts with `Status: in-progress` and the full required frontmatter.
+- **Agent first action**: as the very first file-write action before any source reading, the agent writes its assigned progress file at the path the orchestrator gave it (or the standard path below). The file starts with `Status: in-progress` and the full required frontmatter.
 - The orchestrator does **not** pre-create progress skeletons. If the file does not exist when the agent starts, the agent creates it.
 - Update the file at each major checkpoint and before returning.
 - If blocked, write the blocker text and set `Status: blocked` instead of continuing silently.

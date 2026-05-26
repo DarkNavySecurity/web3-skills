@@ -44,7 +44,7 @@ See `finding-format.md` for the canonical finding file schema; every finding is 
 
 Every phase has a progress artifact following `specs/progress-format.md`. **Agents create their own progress file as their first action** — the orchestrator does not pre-create skeletons.
 
-- Agent's first Bash/Write call before any source reading: `Write audit/progress/{phase}-{owner}.md` with `Status: in-progress` and the required frontmatter.
+- Agent's first file-write action before any source reading: write `audit/progress/{phase}-{owner}.md` with `Status: in-progress` and the required frontmatter.
 - Agent must update the file at each checkpoint and before returning.
 - If blocked, agent sets `Status: blocked` with a concrete blocker.
 - The orchestrator may poll `audit/progress/` via `ls`, `find -newer`, or by reading the `Last Updated` field to detect stalled agents.

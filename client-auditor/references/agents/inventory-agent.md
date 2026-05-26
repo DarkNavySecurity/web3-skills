@@ -26,7 +26,7 @@ Read:
 3. `{skill_dir}/specs/progress-format.md`
 4. `{skill_dir}/judging.md`
 5. `{audit_dir}/manifest.md`
-6. all draft files under `{audit_dir}/findings/_drafts/*.md` — **filter out** macOS `._*` sidecars: use `find {audit_dir}/findings/_drafts -maxdepth 1 -type f -name '*.md' ! -name '._*'`
+6. all draft files under `{audit_dir}/findings/_drafts/*.md` — **filter out** `._*` sidecars: use `find {audit_dir}/findings/_drafts -maxdepth 1 -type f -name '*.md' ! -name '._*'`
 7. all canonical findings under `{audit_dir}/findings/{C,H,M,L,I}-*.md`  (previous-round, if any) — the leading character class naturally skips `._*`
 8. all FP findings under `{audit_dir}/findings/_false-positives/FP-*.md` (so you do not re-promote them) — `FP-` prefix naturally skips `._*`
 9. all depth outputs under `{audit_dir}/depth/{lens}.md`
