@@ -99,9 +99,25 @@ When you encounter a code pattern below during analysis, execute the correspondi
 
 6. **Compliance bypass via auth-transfer**: privileged transfer functions (`authTransfer`, `forceTransfer`) that bypass compliance checks — trace all caller paths upward to external entry points. Can any user-facing function reach the privileged path indirectly? Does the calling contract enforce the compliance checks the bypassed role assumes?
 7. **`tx.origin` authorization**: if authorization depends on `tx.origin`, a malicious intermediate contract can call the target while preserving the victim EOA as `tx.origin`. Use `msg.sender` or explicit signed intent instead.
-8. **EOA-only gates**: `msg.sender.code.length == 0`, `tx.origin == msg.sender`, or `extcodesize == 0` does not prove a caller is an EOA. Contracts in construction have zero code length, account-abstraction wallets may be contracts, and EOA-only gates can break integrations while failing to stop adversaries.
+8. **EOA-only gates (post-EIP-7702)**: `msg.sender.code.length == 0`, `tx.origin == msg.sender`, or `extcodesize == 0` neither prove a caller is an EOA nor prove it is codeless. Contracts in construction have zero code length; after EIP-7702 a plain EOA can carry a delegation designator (nonzero code) and execute arbitrary logic when called or when it receives ETH. Treat every external address as potentially code-bearing and re-entrant. See §Account Delegation (EIP-7702).
 
 **NOT access control issue when**: function is intentionally permissionless (deposit, claim); access enforced in internal function called by all paths; atomic deploy+init via proxy constructor `_data`
+
+---
+
+## Account Delegation (EIP-7702)
+
+**Trigger**: ETH sent to an arbitrary/user address (`.call{value:}`, `transfer`, `send`), `tx.origin`, `code.length`/`extcodesize` on `msg.sender` or a user-supplied address, "recipient is an EOA" assumptions, batched/atomic user actions, approvals granted TO a user address
+
+Since EIP-7702, an EOA can install a delegation designator (`0xef0100 ‖ impl`) and run that implementation's code in its own storage context.
+
+1. **EOA recipients can re-enter**: sending ETH or calling back a user address that was assumed to be a "simple EOA" can now execute attacker code. Any CEI/reentrancy reasoning that relied on "the recipient is an EOA, so no callback" is invalid. Re-check refunds, payouts, sweep-to-user, and push-payment paths for reentrancy.
+2. **Atomic multi-action from an "EOA"**: a delegated EOA can perform several operations atomically in one call. Invariants of the form "an EOA cannot do X and Y in the same transaction" (e.g. deposit-then-withdraw guards, per-tx one-action limits) no longer hold.
+3. **Delegation is mutable**: an account's code can be set, changed, or removed between transactions. Approvals/allowances granted TO such an account persist across delegation changes — a benign-looking account today can behave adversarially after re-delegation.
+4. **Authorization replay**: a 7702 authorization signed with `chainId == 0` is valid on any chain, and authorizations are nonce-bound to the authority. If the protocol reasons about who set an account's code, treat that as attacker-controlled and replayable across chains.
+5. **`tx.origin` still not an EOA proof**: `tx.origin` can be a delegated account executing arbitrary logic; do not use `tx.origin == msg.sender` as a "no contract in the middle" gate.
+
+**NOT a 7702 issue when**: the recipient path already assumes untrusted contract recipients (CEI correct + reentrancy guard); the EOA-only gate is a UX hint with no security dependency; value only moves to protocol-controlled trusted addresses.
 
 ---
 
@@ -216,6 +232,23 @@ When you encounter a code pattern below during analysis, execute the correspondi
 10. **Target-chain opcode compatibility**: if the deployment chain is not Ethereum mainnet, or compiler/opcode choices are chain-sensitive, verify `PUSH0`, `CREATE/CREATE2`, `.transfer()` gas behavior, precompile availability, and chain-specific system-contract semantics. A contract safe on one EVM chain can be undeployable or fund-locking on another.
 
 **NOT a low-level issue when**: assembly is isolated, documented, has a high-level equivalent/test oracle, every hard-coded calldata/memory/storage offset is proven valid for all callers, memory and returndata are bounded, and storage slots/selectors are mechanically derived from audited constants.
+
+---
+
+## Transient Storage (EIP-1153)
+
+**Trigger**: `tstore`, `tload`, Solidity `transient` storage variables, transient-based reentrancy locks, flash-accounting / unlock-callback settlement patterns
+
+Transient storage persists for the WHOLE transaction — across every nested external call — and is wiped only at transaction end. It is address-scoped, and `delegatecall` shares the caller's transient namespace (same as regular storage).
+
+1. **Lock not reset in the same call**: a reentrancy guard built on `tstore(slot, 1)` MUST `tstore(slot, 0)` before the protected function returns. If reset is skipped (or only done on the happy path), a later independent call in the SAME transaction sees the stale lock — either a permanent-within-tx DoS or, if the check is inverted, a bypass.
+2. **Value leaks across external calls**: because transient survives nested calls, a value set before an external call is readable by a reentrant callee. Confirm whether that is the intended guard or an unintended information/authority leak into untrusted reentrant code.
+3. **Assuming cross-transaction persistence**: transient does NOT survive to the next transaction. Any logic that stores a value transiently and expects to read it in a later tx is broken (reads zero).
+4. **Flash accounting settlement**: in unlock/callback designs that net debits and credits in transient deltas and require settlement to zero before the unlock returns, trace EVERY path: a branch that credits without a matching debit, or returns from the callback with nonzero outstanding deltas unsettled, can drain the pool.
+5. **delegatecall / proxy slot collision**: transient slots collide across a `delegatecall` just like storage slots. Verify transient slot constants are namespaced and cannot collide with a delegate target's transient usage.
+6. **Guard stuck on revert-in-try/catch**: if the protected body can revert inside a `try/catch` without unwinding, confirm the transient lock is cleared; a stuck transient lock griefs every remaining call in the transaction.
+
+**NOT a transient-storage issue when**: the lock is set and cleared within the same call frame via a modifier that wraps the whole body; transient is used purely as within-call scratch and never read after the protected section; deltas are provably settled to zero on all callback exit paths.
 
 ---
 

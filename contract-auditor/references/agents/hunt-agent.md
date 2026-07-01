@@ -35,6 +35,8 @@ For each function in your path, from first line to last:
    - Value entry or exit (mint/burn/transfer/claim) → checklist §Value Flow
    - Admin config setter → checklist §Configuration Change
    - Assembly/Yul, `calldataload`/`calldatacopy`, manual ABI decoding, `shr`/`shl`/bit masks, custom storage slots, bit packing, delegatecall, fallback dispatch, or selector routing → checklist §Low-Level / Assembly / Storage Layout. If calldata is read manually, build a calldata layout table covering every external caller before deciding whether it is safe; distinguish a valid direct ABI address extraction from a wrapper/internal-call original-calldata mismatch. If memory or storage is read/written manually, build the appropriate memory-region or storage-slot/packing table instead.
+   - `tstore`/`tload`, `transient` storage variables, transient reentrancy locks, or flash-accounting/unlock-callback patterns → checklist §Transient Storage (EIP-1153)
+   - ETH sent to a user/arbitrary address, `tx.origin`, `code.length`/`extcodesize` checks, "recipient is an EOA" assumptions, or approvals granted to a user address → checklist §Account Delegation (EIP-7702)
    - Privileged role, upgrade, timelock, pauser, keeper, oracle admin, sweeper, or emergency function → checklist §Governance / Admin Risk Matrix
 3. **Follow external calls**:
    - Target in your assigned paths → read and analyze fully

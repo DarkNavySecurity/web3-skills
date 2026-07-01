@@ -74,7 +74,7 @@ The model is already a strong reasoner. The skill doesn't try to think for it �
 
 **Coverage, not constraint** — The skill builds a context map of every in-scope entry point, state variable, value flow, and cross-contract call. Grouping paths by state coupling keeps shared mutable variables from falling between agent boundaries.
 
-**Domain knowledge as a reference, not a script** — The checklist is a curated set of Solidity vulnerability patterns that agents consult when they encounter matching code: value flow, MEV/order risk, low-level/storage layout, governance/admin risk, time/randomness, liveness/DoS, signatures, and token integration. It tells the agent what to check, not what to conclude.
+**Domain knowledge as a reference, not a script** — The checklist is a curated set of Solidity vulnerability patterns that agents consult when they encounter matching code: value flow, MEV/order risk, low-level/storage layout, transient storage (EIP-1153), account delegation (EIP-7702), governance/admin risk, time/randomness, liveness/DoS, signatures, and token integration. It tells the agent what to check, not what to conclude.
 
 **Validation as discipline, not gatekeeping** — Every finding passes a structured validation protocol before inclusion. `deep` mode adds a falsifier agent that challenges every finding with source-level verification.
 
