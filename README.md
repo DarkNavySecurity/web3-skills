@@ -63,6 +63,7 @@ Update skills in https://github.com/DarkNavySecurity/web3-skills/
 **Smart Contract Auditing** — $21K earned on [Immunefi](https://immunefi.com/profile/DARKNAVY/)
 
 **Blockchain Client Auditing**
+- ~$800 earned on the [Firedancer Immunefi Competition](https://immunefi.com/audit-competition/firedancer-v1-audit-comp/information/)
 - $1K earned on [Immunefi](https://immunefi.com/profile/DARKNAVY/) (1 Medium finding)
 - Independently discovered a vulnerability in [rippled](https://github.com/XRPLF/rippled) (XRP Ledger), officially acknowledged and patched
 
