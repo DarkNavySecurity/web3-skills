@@ -56,9 +56,9 @@ Gates are run as inline Bash one-liners by the orchestrator at the end of each p
 
 Authoritative gate rules:
 
-- `spawn_manifest.md` is required after recon; every `Required = YES` row must have a terminal `progress/hunt-{focus}.md`.
+- `spawn_manifest.md` is required after recon; every `Required = YES` row must have a unique focus, 1-3 assigned entry-point clusters, and explicit output/progress paths.
 - `progress/recon.md` must exist and be terminal (`complete` | `skipped` | `blocked`) by start of hunt.
-- Every required hunt has a terminal `progress/hunt-{focus}.md`. Zero drafts (`findings/_drafts/{focus}-*.md` empty) is **not** a gate failure — `Status: complete` plus `Findings Touched: 0` in the progress file is a valid "nothing found here" signal. A `Status: blocked` progress file is also terminal but the orchestrator should triage the blocker before proceeding.
+- Every required hunt must reach `Status: complete` with `Entry Points Remaining: none` at the exact `Progress Output` path from `spawn_manifest.md`. Zero drafts under its `Expected Output Prefix` is **not** a gate failure when the progress file also records `Findings Touched: 0`. `Status: blocked` is terminal for observability but blocks Stage 3 completion until the orchestrator triages and re-runs that row.
 - `progress/xsub.md` must exist by inventory time (skipped marker is acceptable).
 - After inventory: `findings_inventory.md`, `coverage.md`, and `progress/inventory.md` must exist; every file in `findings/` must have a valid `id`, `status`, and `severity` in its frontmatter.
 - Every active finding (`status` ∈ {active, verified}) with `verification_required: true` must be queued in `verification_queue.md` (default mode: `severity` ∈ {Critical, High, Medium} unless explicitly downgraded with `verification_required: false` + reason; deep mode: same plus depth-promoted findings).

@@ -67,7 +67,7 @@ audit/
 
 `audit/progress/` is the live control plane. Required files vary by command phase: `progress/recon.md`, `progress/hunt-{focus}.md`, `progress/xsub.md`, `progress/inventory.md`, `progress/verification_queue.md`, `progress/verify-{ID}.md`, `progress/depth-{lens}.md`, `progress/adversarial.md`, `progress/report.md`.
 
-Agents create their own progress file as their first file-write action — the orchestrator does not pre-create skeletons. Completion gates reject phases whose progress files are not terminal (`complete` | `skipped` | `blocked`).
+Agents create their own progress file as their first file-write action — the orchestrator does not pre-create skeletons. Completion gates reject phases whose progress files are not terminal (`complete` | `skipped` | `blocked`); required hunt rows additionally require `complete` with no entry points remaining.
 
 ## Gates
 
@@ -75,7 +75,7 @@ Each phase ends with an inline Bash snippet (in `SKILL.md`) that the orchestrato
 
 The most important gate invariants:
 - `spawn_manifest.md` has at least one `Required = YES` row
-- every required hunt has a terminal `progress/hunt-{focus}.md` (zero drafts is OK with `Findings Touched: 0`)
+- every required hunt uses its manifest-declared paths and reaches `Status: complete` with `Entry Points Remaining: none` (zero drafts is OK with `Findings Touched: 0`)
 - every canonical finding has frontmatter `id`, `status`, `severity`, `confidence`, and filename PREFIX equals `severity[0]`
 - every queued verification id has a finding file with `verification_status` set after verify
 

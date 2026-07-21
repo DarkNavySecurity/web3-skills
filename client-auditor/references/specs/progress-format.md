@@ -60,4 +60,4 @@ Use the exact `Progress Output` path from `spawn_manifest.md` for hunt agents wh
 
 ## Completion Gate
 
-Each phase's completion gate (defined in `SKILL.md` as inline Bash) rejects progress files that are not terminal (`complete` | `skipped` | `blocked`) when the phase is supposed to be done. `blocked` is terminal only when the blocker is explicit and the final report/coverage records the consequence.
+Each phase's completion gate (defined in `SKILL.md` as inline Bash) rejects progress files that are not terminal (`complete` | `skipped` | `blocked`) when the phase is supposed to be done. A required hunt row is stricter: `blocked` or `skipped` does not satisfy the Stage 3 gate, which requires `complete` and `Entry Points Remaining: none`. For other phases, `blocked` is terminal only when the blocker is explicit and the final report/coverage records the consequence.
